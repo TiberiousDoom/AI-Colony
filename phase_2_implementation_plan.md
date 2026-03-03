@@ -1,6 +1,6 @@
 # Phase 2: Competition — Implementation Plan
 
-**Version:** 1.1
+**Version:** 1.2
 **Date:** March 3, 2026
 **Goal:** Two villages side by side, Utility AI vs Behavior Trees, full comparison.
 
@@ -75,12 +75,14 @@ Steps 11–14. Cross-AI determinism, event mirroring validation, Phase 2 accepta
 - Season order: spring → summer → autumn → winter → spring...
 - Seasons affect: forest regeneration, action yields, action duration penalties
 
-| Season | Forest Regen | Forage/Fish Yield | Outdoor Duration | Notes |
-|--------|-------------|-------------------|------------------|-------|
+| Season | Forest Regen | Forage Yield | Outdoor Duration | Notes |
+|--------|-------------|--------------|------------------|-------|
 | Spring | 2× (1.0/tick) | Normal | Normal | Growth bonus |
 | Summer | Normal (0.5/tick) | Normal | Normal | Baseline |
 | Autumn | Normal | +50% yield | Normal | Harvest bonus |
 | Winter | 0 (no regen) | −25% yield | +50% penalty (stacks with night) | Harsh conditions |
+
+**Fish yield exception:** Fish yields are NOT affected by seasonal modifiers. The master plan says fish is "Available regardless of season (important for winter survival)." Fish always yields 8–12 food regardless of season. This makes fish a critical winter survival resource and a meaningful strategic choice.
 
 ### Files to modify
 
@@ -98,13 +100,20 @@ Steps 11–14. Cross-AI determinism, event mirroring validation, Phase 2 accepta
 - Spring: double regen rate
 - Winter: skip regeneration entirely
 
-**`src/simulation/actions.ts`**
-- Introduce a `TickContext` object to thread time/season through the action system without changing every function signature: `{ timeOfDay: TimeOfDay, season: Season, structures: Structure[] }`
-- Pass `TickContext` to `getEffectiveDuration()`, `canPerform()`, and `complete()` instead of adding individual parameters
+**`src/simulation/actions.ts`** (**Breaking change** — all 7 existing action definitions must be updated)
+- Introduce a `TickContext` object to thread time/season/structures through the action system: `{ timeOfDay: TimeOfDay, season: Season, structures: Structure[] }`
+- Change `ActionDefinition` interface: `getEffectiveDuration(ctx)`, `canPerform(v, w, s, campfire, ctx)`, `complete(v, w, s, rng, campfire, ctx)`. **Design note:** `TickContext` supplements existing parameters (`stockpile`, `campfire` remain separate) rather than replacing them. This keeps `TickContext` small and focused on time/season/structures context, while stockpile and campfire remain explicit parameters for clarity. The full signatures become:
+  - `getEffectiveDuration(ctx: TickContext): number` (replaces `getEffectiveDuration(timeOfDay)`)
+  - `canPerform(villager, world, stockpile, campfire, ctx: TickContext): boolean`
+  - `complete(villager, world, stockpile, rng, campfire, ctx: TickContext): void`
+- Update all 7 existing action definitions (FORAGE, EAT, REST, CHOP_WOOD, HAUL, FISH, IDLE) to accept the new signature
+- Update all call sites in `simulation-engine.ts` (lines ~156, ~167, ~226, ~229)
+- Update `isOutdoor()` to include `mine_stone` (it occurs at outdoor stone deposits, should receive night/winter penalties)
 - `getEffectiveDuration(ctx)`: apply winter outdoor penalty (×1.5) and night penalty (×1.5) multiplicatively: `ceil(base * winterMult * nightMult)`. A winter night forage = `ceil(3 * 1.5 * 1.5)` = `ceil(6.75)` = 7 ticks
-- Add season-aware yield modifiers to `complete()` for forage/fish:
+- Add season-aware yield modifiers to `complete()` for forage:
   - Autumn: yield × 1.5 (rounded down)
   - Winter: yield × 0.75 (rounded down)
+- **Fish yield is exempt from seasonal modifiers** — the master plan explicitly notes fish is "available regardless of season (important for winter survival)." Applying a winter penalty would undermine fish as a strategic winter food source. Fish yields always use the base range (8–12 food).
 
 **`src/simulation/ai/ai-interface.ts`**
 - Add `season: Season` to `AIWorldView`
@@ -144,8 +153,8 @@ Steps 11–14. Cross-AI determinism, event mirroring validation, Phase 2 accepta
 - Warmth is a 4th need (0–100), starts at 75
 - Drain rate: 0 in spring/summer/autumn, 3/tick in winter
 - At warmth ≤ 0: health drains 1/tick (like starvation)
-- Recovery: campfire (+25), shelter (+30) via `warm_up` action
-- Resting at campfire/shelter also passively restores +5 warmth
+- Recovery via `warm_up` action: +30 at shelter, +25 at campfire, +20 elsewhere
+- Resting at campfire/shelter also passively restores +5 warmth in winter
 
 ### Files to modify
 
@@ -159,7 +168,7 @@ Steps 11–14. Cross-AI determinism, event mirroring validation, Phase 2 accepta
   - At warmth ≤ 0: health −= 1.0 (exposure damage, same as starvation)
 
 **`src/simulation/actions.ts`**
-- Add `WARM_UP_ACTION`: duration 2, energyCost 0, can perform anywhere, restores +25 warmth (or +30 at campfire/shelter)
+- Add `WARM_UP_ACTION`: duration 2, energyCost 0, can perform anywhere, restores warmth: +25 at campfire, +20 elsewhere (Step 3 adds +30 at shelter tier)
 - Modify `REST_ACTION.complete()`: also restore +5 warmth if at campfire/shelter in winter
 - Register `warm_up` in `ACTION_MAP`
 
@@ -195,6 +204,8 @@ Steps 11–14. Cross-AI determinism, event mirroring validation, Phase 2 accepta
 |-----------|------|--------|----------|
 | Shelter | 20 wood | Rest bonus +10, warmth in winter | 3 villagers |
 | Storage | 15 wood + 10 stone | +100 max per resource type | N/A |
+
+**Stockpile cap:** Introduce a base stockpile cap of **200 per resource type** (food, wood, stone). Without storage, deposits that would exceed 200 are clamped. Each storage structure adds +100 to the cap for all types. This creates a tangible reason to build storage and creates the strategic tension the master plan describes. The cap applies only when depositing (via haul or auto-deposit), not when directly gaining resources (e.g., forage puts food into carrying, not stockpile).
 
 Structures are placed on passable tiles near the campfire (within a settlement radius of ~5 tiles). Each structure occupies one tile but does NOT block movement — villagers can walk through structures to interact with them. This avoids pathfinding complications in a small settlement area.
 
@@ -236,7 +247,8 @@ export function isAtStructure(pos: Position, structures: Structure[], type?: Str
 ### Files to modify
 
 **`src/simulation/villager.ts`**
-- Add `'build_shelter' | 'build_storage' | 'mine_stone'` to `VillagerAction` (replace `'build'`)
+- Replace `'build'` with `'build_shelter' | 'build_storage'` in the `VillagerAction` union type
+- Note: `mine_stone`, `flee`, `warm_up` are already in the union type — no additions needed for those
 
 **`src/simulation/simulation-engine.ts`**
 - Add `structures: Structure[]` to `SimulationState`
@@ -244,7 +256,8 @@ export function isAtStructure(pos: Position, structures: Structure[], type?: Str
 - Pass structures via `TickContext` to action system
 - Update prosperity recording: count structures and unique types
 - Add structure-built events (new event type: `'structure_built'`)
-- Storage bonus: apply `getStorageBonus()` as max cap check when depositing resources
+- Implement stockpile cap: base 200 + `getStorageBonus()`. Clamp on deposit.
+- Update `activityBreakdown` action list: replace `'build'` with `'build_shelter'`, `'build_storage'`
 
 **`src/simulation/actions.ts`**
 - Add `MINE_STONE_ACTION`: duration 5, energyCost 2, requires adjacent stone tile, yields 6–10 stone via `TickContext`
@@ -356,6 +369,8 @@ Events fire every 5–10 days (seeded RNG determines timing and type). Each even
 
 **`src/simulation/events.ts`** (new file)
 ```typescript
+// Phase 2 events only. resource_discovery, illness, and storm are deferred to Phase 4
+// (master plan line 453: "Additional events: illness, storm, resource discovery")
 export type RandomEventType = 'predator' | 'blight' | 'cold_snap'
 
 export interface RandomEvent {
@@ -535,6 +550,7 @@ Each village has:
 - **Simultaneous elimination:** if both hit 0 on same tick, tie — no winner
 - **Stalemate detection:** if no village's prosperity changes by >5% over last 30 days, show "Stagnation" warning on dashboard (informational only, doesn't auto-end)
 - **Critical population:** when a village is down to 1 villager, log a "critical population" warning
+- **Resource exhaustion:** if all harvestable resources on a village's map are exhausted and no regeneration is pending (all tiles at 0 with regenRate 0 or blighted), log a `'resource_exhaustion'` event. This is an informational warning, not an auto-end condition (villagers may still survive on stockpiled resources). Master plan marks this as "unlikely" but it should be detected and logged.
 - **Manual stop / time limit:** compare all surviving villages on prosperity score
 
 ### New file
@@ -553,6 +569,7 @@ export interface CompetitionConfig {
   worldWidth: number
   worldHeight: number
   villages: VillageConfig[]
+  timeLimit?: number            // Optional: max days before auto-end (default: unlimited)
 }
 
 export interface VillageState {
@@ -614,7 +631,8 @@ export class CompetitionEngine {
 - Add `villageId: string` to `AIWorldView` so AI knows which village it belongs to
 
 **`src/simulation/simulation-engine.ts` — SimulationEvent type**
-- Expand to: `'death' | 'birth' | 'day_start' | 'night_start' | 'season_change' | 'milestone' | 'structure_built' | 'random_event' | 'village_eliminated' | 'critical_population' | 'stagnation_warning'`
+- Expand to: `'death' | 'birth' | 'day_start' | 'night_start' | 'season_change' | 'milestone' | 'structure_built' | 'random_event' | 'village_eliminated' | 'critical_population' | 'stagnation_warning' | 'resource_exhaustion'`
+- Add optional `villageId?: string` field to `SimulationEvent`. Per-village events (deaths, births, structures) carry the village ID; global events (season changes, random events) leave it `undefined`. The dashboard event log merges per-village and global event arrays, using `villageId` to color-code entries. This avoids needing separate merge logic during rendering.
 
 ### Tests to write
 
@@ -670,6 +688,7 @@ export function QuickCompare({ villages }: { villages: VillageState[] }) {
 - Add QuickCompare component below charts
 - Grid layout: KPIs | charts + event log | quick-compare strip
 - Handle eliminated village: gray out its KPIs, freeze its chart data
+- **Update `computeActivityData()` order:** add `mine_stone`, `build_shelter`, `build_storage`, `flee`, `warm_up` to the hardcoded display order (currently only lists 7 of the original actions)
 
 **`src/components/KPICard.tsx`**
 - Support optional `villageColor` prop for left border accent
@@ -743,6 +762,8 @@ The master plan specifies simulation snapshots as a Phase 2 feature. Key require
 - Show storage usage in UI, allow deletion of old snapshots
 - **RNG state must be captured** so that loading and pressing play produces identical results
 - **AI state excluded** — BT and Utility AI are pure functions of world state, so they re-evaluate correctly after load
+- **AI swap on load:** The master plan calls out the ability to "load a snapshot to resume a simulation from that exact point — useful for rewinding to a key moment and watching a different AI handle the same crisis." `deserializeState()` should accept an optional `aiOverrides: Record<string, IAISystem>` parameter, mapping village IDs to replacement AI systems. If provided, the loaded village uses the override AI instead of the original. This enables the "rewind and swap" workflow.
+- **Forward-compatible aiState field:** The `SimulationSnapshot` includes an optional `aiState?: Record<string, unknown>` field, unused in Phase 2 (BT and Utility AI are stateless). This field is reserved for Phase 5's evolutionary AI whose genome weights cannot be reconstructed from world state.
 
 ### New file
 
@@ -755,11 +776,12 @@ export interface SimulationSnapshot {
   seed: number
   competitionState: SerializedCompetitionState
   rngState: number[]             // Captured RNG internal state for each fork
+  aiState?: Record<string, unknown>  // Reserved for Phase 5 (evolutionary AI genome weights)
 }
 
 // Serialize World (tiles + blight map), Villagers, Stockpile, Structures, Events, History
 export function serializeState(engine: CompetitionEngine): SimulationSnapshot
-export function deserializeState(snapshot: SimulationSnapshot): CompetitionEngine
+export function deserializeState(snapshot: SimulationSnapshot, aiOverrides?: Record<string, IAISystem>): CompetitionEngine
 
 // localStorage management
 export function saveSnapshot(snapshot: SimulationSnapshot): void
@@ -807,6 +829,8 @@ export function getStorageUsage(): { usedBytes: number; capBytes: number }
 - Snapshot listing and deletion works
 - Schema version included for forward compatibility
 - Snapshot label auto-generated from seed + timestamp
+- AI swap on load: load snapshot, override one village's AI, resumed simulation diverges from original
+- aiState field preserved through serialization round-trip (even if unused in Phase 2)
 
 ---
 
@@ -890,6 +914,26 @@ This step should be done incrementally during Steps 1–3 (each time a new need 
 
 Update existing tests for Phase 2 compatibility and add regression tests.
 
+### Breaking changes to existing test signatures
+
+The following signature changes will break existing tests. Each must be addressed:
+
+1. **`tickNeeds(villager)` → `tickNeeds(villager, season)`**: All 7 existing `tickNeeds` tests in `villager.test.ts` call without a season argument. **Solution:** Add `season: Season = 'summer'` default parameter so existing calls still compile and behave identically (warmth doesn't drain in summer). Add new test cases that explicitly pass `'winter'` for warmth drain testing.
+
+2. **`tickRegeneration()` → `tickRegeneration(season)`**: All 3 `tickRegeneration` tests in `world.test.ts` call without arguments. **Solution:** Add `season: Season = 'summer'` default parameter. Existing tests pass unchanged. Add new test cases for spring (2× regen) and winter (0 regen).
+
+3. **`getEffectiveDuration(timeOfDay)` → `getEffectiveDuration(ctx: TickContext)`**: All duration tests in `actions.test.ts` pass a `TimeOfDay` string. **Solution:** Update all existing `getEffectiveDuration('day')` calls to `getEffectiveDuration({ timeOfDay: 'day', season: 'summer', structures: [] })`. This is a bulk find-and-replace.
+
+4. **`canPerform(v, w, s, campfire)` → `canPerform(v, w, s, campfire, ctx)`**: All `canPerform` test calls need the additional `TickContext` argument. **Solution:** Add a test helper `const defaultCtx: TickContext = { timeOfDay: 'day', season: 'summer', structures: [] }` and append it to all existing calls.
+
+5. **`complete(v, w, s, rng, campfire)` → `complete(v, w, s, rng, campfire, ctx)`**: Same pattern — append `defaultCtx` to all existing `complete()` calls.
+
+6. **`makeWorldView()` helper in `utility-ai.test.ts`**: Must be updated to include the new required `AIWorldView` fields: `season: 'summer'`, `structures: []`, `activeEvents: []`, `villageId: 'test'`. Add these as defaults in the helper.
+
+7. **`getAllActions()` assertion in `actions.test.ts`**: Currently checks for 7 actions. After Step 3, must expect 12: original 7 + mine_stone, build_shelter, build_storage, warm_up, flee.
+
+8. **`seed.test.ts`**: Add tests for new `getState()` and `createRNGFromState()` methods on `SeededRNG`.
+
 ### Existing test files to update
 
 **`tests/simulation-engine.test.ts`**
@@ -898,23 +942,37 @@ Update existing tests for Phase 2 compatibility and add regression tests.
 - Verify backward compatibility of single-village engine
 
 **`tests/actions.test.ts`**
+- Update ALL `getEffectiveDuration`, `canPerform`, and `complete` calls with `TickContext` (see breaking changes above)
 - Add tests for mine_stone action
 - Add tests for build_shelter and build_storage actions
 - Add tests for flee action (2× movement speed)
 - Add tests for warm_up action
 - Update duration tests for seasonal penalties (TickContext)
 - Update yield tests for seasonal modifiers
+- Update `getAllActions` test to expect 12 actions
 
 **`tests/villager.test.ts`**
-- Add warmth need to creation tests
-- Update tickNeeds tests for warmth drain in winter
+- Add warmth need to creation tests (expect 4 needs, not 3)
+- Existing tickNeeds tests pass unchanged (default `season = 'summer'`)
+- Add new tickNeeds tests for warmth drain in winter
 - Test exposure damage mechanics
 
 **`tests/utility-ai.test.ts`**
+- Update `makeWorldView()` helper with new required fields (see breaking changes above)
 - Add tests for warmth-related decisions
 - Add tests for build decisions
 - Add tests for mine_stone decisions
 - Test seasonal awareness (autumn stockpiling)
+
+**`tests/world.test.ts`**
+- Existing tickRegeneration tests pass unchanged (default `season = 'summer'`)
+- Add tests for spring 2× regeneration
+- Add tests for winter 0 regeneration
+
+**`tests/seed.test.ts`**
+- Add tests for `getState()` returning current RNG internal state
+- Add tests for `createRNGFromState()` restoring from saved state
+- Verify: `getState()` → `createRNGFromState()` → produces identical sequence
 
 **`tests/dom-free.test.ts`**
 - Add new files to DOM-free validation: `structures.ts`, `events.ts`, `behavior-tree.ts`, `behavior-tree-ai.ts`, `competition-engine.ts`, `serialization.ts`
