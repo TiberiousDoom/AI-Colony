@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+vendor/
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Build outputs
+dist/
+build/
+out/
+*.o
+*.so
+*.dylib
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test and coverage
+coverage/
+.nyc_output/
+*.lcov
+.pytest_cache/
+
+# Package manager lock files (uncomment the ones you don't use)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
