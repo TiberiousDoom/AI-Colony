@@ -1,6 +1,6 @@
 # AI Colony — Phase 1: Foundation Implementation Plan
 
-**Version:** 1.0
+**Version:** 1.1
 **Date:** March 3, 2026
 **Parent Document:** ai_colony_project_plan_v1_1.md (v1.3)
 
@@ -28,10 +28,11 @@
 12. [Step 11: Simulation Controls & Day/Night Cycle](#step-11-simulation-controls--daynight-cycle)
 13. [Step 12: Testing Suite](#step-12-testing-suite)
 14. [Step 13: Integration & Polish](#step-13-integration--polish)
-15. [Architecture Rules & Constraints](#architecture-rules--constraints)
-16. [File Structure (Phase 1)](#file-structure-phase-1)
-17. [Type Definitions Reference](#type-definitions-reference)
-18. [Acceptance Criteria](#acceptance-criteria)
+15. [Step 14: In-App Acceptance Criteria Checklist](#step-14-in-app-acceptance-criteria-checklist)
+16. [Architecture Rules & Constraints](#architecture-rules--constraints)
+17. [File Structure (Phase 1)](#file-structure-phase-1)
+18. [Type Definitions Reference](#type-definitions-reference)
+19. [Acceptance Criteria](#acceptance-criteria)
 
 ---
 
@@ -54,6 +55,7 @@ The steps below are ordered by dependency — each step builds on the previous. 
 | 11 | Controls & day/night | `src/components/TopBar.tsx`, integrated into engine | Steps 8–10 |
 | 12 | Testing suite | `tests/*.test.ts` | Steps 2–8 |
 | 13 | Integration & polish | All files | Steps 1–12 |
+| 14 | In-app acceptance checklist | `src/components/AcceptanceChecklist.tsx`, `src/utils/acceptance-checks.ts` | Steps 1–13 |
 
 ---
 
@@ -264,7 +266,10 @@ export class World {
   isPassable(x: number, y: number): boolean;
   isInBounds(x: number, y: number): boolean;
 
-  /** Find tiles matching a predicate within a radius of (cx, cy) */
+  /** Find tiles matching a predicate within a radius of (cx, cy).
+   *  Iterates a square bounding box clamped to map bounds.
+   *  At radius 10 this checks ~400 tiles — fast enough for Phase 1.
+   *  Phase 4+ adds spatial hashing if profiling shows this is a bottleneck. */
   findTilesInRadius(cx: number, cy: number, radius: number, predicate: (t: Tile) => boolean): Tile[];
 
   /** Advance resource regeneration for one tick */
@@ -276,7 +281,7 @@ export class World {
 
 1. Create RNG from seed, fork it for world gen.
 2. Generate a noise map using fractal noise (4 octaves, persistence 0.5, lacunarity 2.0).
-3. Apply thresholds to classify tiles:
+3. Apply thresholds to classify tiles. **Tuning note:** Fractal noise values cluster around 0 (roughly normal distribution), so bands near 0 capture more tiles than equal-width bands at the extremes. The thresholds below are starting points — adjust during testing to hit target distributions (~8% water, ~30% grass, ~45% forest, ~12% grass clearings, ~5% stone):
    - noise < -0.3 → Water
    - noise < -0.05 → Grass
    - noise < 0.3 → Forest
@@ -335,8 +340,8 @@ export function findPath(
 - **Movement:** 4-directional (up, down, left, right). Diagonal movement excluded for simplicity — revisit if villager movement looks unnatural.
 - **Heuristic:** Manhattan distance (consistent with 4-directional movement).
 - **Cost:** Uniform cost of 1 per tile.
-- **Max search limit:** Cap the open set at 2000 nodes to prevent pathfinding from stalling on unreachable goals. If the cap is reached, return `{ found: false, path: [], cost: 0 }`.
-- **No path found:** Return a partial path to the closest reachable tile to the goal (useful for villagers navigating around water toward fish).
+- **Max search limit:** Cap the open set at 2000 nodes to prevent pathfinding from stalling on unreachable goals.
+- **No path found / search limit reached:** In both cases, return a partial path to the closest reachable tile to the goal (the node with the lowest heuristic value in the closed set), with `found: false`. This is useful for villagers navigating around water toward fishing spots — they get as close as possible rather than giving up entirely. If no nodes were expanded at all (start tile is impassable), return `{ found: false, path: [], cost: 0 }`.
 
 ### 4.3 Tests
 
@@ -436,7 +441,18 @@ export function createVillager(id: string, name: string, x: number, y: number): 
 
 Creates a villager with all needs at 75 (matching the project plan's "new villager" spec — they start needing some care, not at full).
 
-**Starting villagers:** The initial 10 villagers start at position near the campfire. Their names can be generated from a small name list using the seeded RNG.
+**Starting villagers:** The initial 10 villagers start at positions within the 7×7 starting clearing near the campfire. Their names are drawn from a seeded name pool:
+
+```ts
+const VILLAGER_NAMES = [
+  'Anya', 'Bjorn', 'Calla', 'Doran', 'Elke',
+  'Finn', 'Greta', 'Hale', 'Ivy', 'Joss',
+  'Kira', 'Leif', 'Mira', 'Nils', 'Opal',
+  'Per', 'Quinn', 'Runa', 'Sven', 'Tova',
+];
+```
+
+Names are assigned by shuffling this list with the seeded RNG and taking the first N entries. This keeps names deterministic for a given seed.
 
 ### 5.6 Village stockpile
 
@@ -448,7 +464,7 @@ export interface VillageStockpile {
 }
 ```
 
-Shared village-level stockpile. All villagers deposit to and withdraw from the same stockpile. Initial stockpile: `{ food: 50, wood: 30, stone: 10 }` — enough to get started but not enough to coast.
+Shared village-level stockpile. All villagers deposit to and withdraw from the same stockpile. **The stockpile is located at the campfire position** — villagers must walk to the campfire to deposit (haul) or withdraw (eat) resources. Initial stockpile: `{ food: 50, wood: 30, stone: 10 }` — enough to get started but not enough to coast.
 
 ### 5.7 Tests
 
@@ -475,11 +491,14 @@ Each action is a self-contained function that:
 ```ts
 export interface ActionDefinition {
   type: VillagerAction;
-  /** Ticks required to complete */
+  /** Base ticks required to complete (before modifiers like night penalty) */
   duration: number;
   /** Energy cost per tick */
   energyCostPerTick: number;
-  /** Check if the villager can perform this action right now */
+  /** Returns the effective duration accounting for time of day. Night increases
+   *  outdoor action durations by 50% (rounded up). See Step 8.5. */
+  getEffectiveDuration(timeOfDay: 'day' | 'night'): number;
+  /** Check if the villager can perform this action in its current position */
   canPerform(villager: Villager, world: World, stockpile: VillageStockpile): boolean;
   /** Begin the action (set up state) */
   start(villager: Villager, world: World, stockpile: VillageStockpile): void;
@@ -494,14 +513,22 @@ export interface ActionDefinition {
 
 | Action | Duration | Energy/Tick | Precondition | Effect on Completion |
 |--------|----------|-------------|--------------|---------------------|
-| **Forage** | 3 ticks | 1 | At or adjacent to a forest tile with resource > 0 | Villager receives 10–15 food (carried). Forest resource decreases |
-| **Eat** | 1 tick | 0 | Stockpile food > 0 OR carrying food | +30 hunger. Reduces stockpile or carried food |
-| **Rest** | 3 ticks | 0 | At campfire or idle | +20 energy (campfire), +15 energy (outdoors) |
-| **Chop Wood** | 4 ticks | 2 | At or adjacent to a forest tile with resource > 0 | Villager receives 8–12 wood (carried). Forest resource decreases |
-| **Haul** | varies | 1 | Carrying resources AND not at stockpile | Move toward stockpile, deposit on arrival |
+| **Forage** | 3 ticks | 1 | At or adjacent to a forest tile with resource > 0 | Villager receives 10–15 food (carried). Forest `resourceAmount` decreases by same amount |
+| **Eat** | 1 tick | 0 | At stockpile (campfire) AND stockpile food >= 5, OR carrying food | +30 hunger. Consumes 5 food from stockpile (or 5 from carried) |
+| **Rest** | 3 ticks | 0 | At campfire or any tile | +20 energy (at campfire), +15 energy (outdoors) |
+| **Chop Wood** | 4 ticks | 2 | At or adjacent to a forest tile with resource > 0 | Villager receives 8–12 wood (carried). Forest `resourceAmount` decreases by same amount |
+| **Haul** | varies | 1 | Carrying resources AND not at stockpile (campfire) | Move toward campfire, deposit all carried resources on arrival |
 | **Fish** | 4 ticks | 1 | Adjacent to a water tile | Villager receives 8–12 food (carried). No tile depletion |
 | **Flee** | instant movement | 3 | Threat detected (Phase 2+ for predators — in Phase 1, include the mechanic but no triggers) | Move away from threat at 2× speed |
 | **Idle** | 1 tick | 0 | Always available | Wander toward nearest unexplored/unvisited tile |
+
+### 6.2.1 Sustainability analysis
+
+Hunger drains at 2.0/tick. At 30 ticks/day, that's 60 hunger/day. Eating restores +30 hunger at a cost of 5 stockpile food, so a villager needs to eat twice per day (10 food/day) to stay above zero.
+
+With 10 villagers, the village consumes ~100 food/day. Foraging yields 10–15 food per 3-tick action (plus ~3 ticks of travel + 1 tick haul ≈ 7 total ticks per forage cycle). One villager can forage ~4 times per day = ~50 food/day. So **at least 2 villagers must forage full-time** to sustain the village, leaving 8 for other activities. This is tight but viable — the AI should naturally prioritize food when hunger is high.
+
+Starting stockpile of 50 food gives the village ~12 hours (half a day) of runway before foragers must start producing. This is intentionally tight to create early-game pressure.
 
 ### 6.3 Movement integration
 
@@ -511,7 +538,17 @@ Actions that require the villager to be at a specific tile (forest, water-adjace
 3. Move the villager along the path (1 tile per tick, 2 tiles for flee)
 4. Begin the action once arrived
 
-This movement-before-action pattern is handled in the simulation engine tick (Step 8), not inside the action itself. The action's `canPerform` returns false if the villager isn't in position, and the AI/engine is responsible for moving them first.
+This movement-before-action pattern is handled in the simulation engine tick (Step 8), not inside the action itself. The action's `canPerform` checks whether the villager is currently at a valid position for the action.
+
+**AI → Engine → Action execution flow:**
+
+1. AI calls `decide()` → returns `{ action: 'forage', targetPosition: { x: 10, y: 15 } }`
+2. Engine checks: is the villager at (10, 15) or adjacent? If yes, start the forage action.
+3. If no, engine pathfinds to (10, 15) and starts the villager moving. The villager's state is set to `currentAction: 'idle'` with an active path.
+4. **On subsequent ticks:** The engine skips AI decisions for villagers with an active path (Step 8.3 item 5: "idle AND no path"). The villager moves 1 tile/tick along its path.
+5. When the villager arrives at the target, the path empties. On the next tick, the engine calls the AI again. The AI re-evaluates and (assuming hunger is still the top priority) picks forage again. This time `canPerform` returns true, and the action starts.
+
+This "re-decide on arrival" pattern is intentional: conditions may have changed during travel (another villager depleted the forest tile, hunger recovered because someone else deposited food, etc.). The AI always makes fresh decisions from current state.
 
 ### 6.4 Resource flow
 
@@ -698,7 +735,16 @@ export class SimulationEngine {
 }
 ```
 
-### 8.2 Tick loop — step by step
+### 8.2 Campfire as village center
+
+The campfire serves as the spatial anchor for the village:
+- **Stockpile location** — villagers haul resources to the campfire and eat from the stockpile there.
+- **Rest bonus** — resting at or adjacent to the campfire gives +20 energy vs +15 elsewhere.
+- **Spawning** — new villagers (Phase 2 population growth) appear near the campfire.
+
+The `campfirePosition` is determined during world generation (center of the 7×7 starting clearing).
+
+### 8.3 Tick loop — step by step
 
 Each call to `engine.tick()` performs:
 
@@ -729,11 +775,11 @@ Each call to `engine.tick()` performs:
 
 7. **World update:** Call `world.tickRegeneration()` to regrow forests.
 
-8. **History snapshot:** If a new in-game day just started (tick % TICKS_PER_DAY === 0), compute and store a `DailySnapshot` including prosperity score.
+8. **History snapshot:** If a new in-game day just started (tick % TICKS_PER_DAY === 0), compute and store a `DailySnapshot` including prosperity score. **Important:** The constructor must also record an initial snapshot at tick 0 so charts are never empty on load.
 
 9. **End condition:** If no villagers are alive, set `isOver = true`.
 
-### 8.3 Prosperity score calculation (`src/utils/scoring.ts`)
+### 8.4 Prosperity score calculation (`src/utils/scoring.ts`)
 
 ```ts
 export function calculateProsperity(
@@ -761,12 +807,12 @@ export function calculateProsperity(
 
 > **Phase 1 note:** `structureCount` and `uniqueStructureTypes` will be 0 since structures aren't buildable until Phase 2. The formula is implemented now for completeness.
 
-### 8.4 Day/night mechanical effects
+### 8.5 Day/night mechanical effects
 
 - Night: Forage/Chop/Fish action durations increase by 50% (rounded up). This is applied by the action system when checking `timeOfDay`.
 - Night: The Utility AI's environmental modifier already penalizes outdoor actions by -0.3.
 
-### 8.5 Tests
+### 8.6 Tests
 
 - `tests/simulation-engine.test.ts`: Verify tick advances state. Verify need drain per tick. Verify villager death. Verify day/night cycle transitions. Verify history snapshots are recorded.
 
@@ -870,8 +916,10 @@ All charts read from `state.history.daily[]`.
 
 1. **Population over time** — `<LineChart>` with one line (Phase 1 is single village; multi-line in Phase 2).
 2. **Resource stockpiles over time** — `<AreaChart>` with stacked areas for food, wood, stone.
-3. **Villager activity breakdown** — `<BarChart>` showing how many villagers are performing each action type on the current day.
+3. **Villager activity breakdown** — `<BarChart>` showing how many villagers are performing each action type on the current day. This chart reads from live `state.villagers` (current tick), not from history.
 4. **Prosperity score over time** — `<LineChart>` tracking the composite score.
+
+**Initial state:** The first `DailySnapshot` is recorded at tick 0 (before the first tick executes) so that charts are never empty. Without this, at 1× speed the dashboard shows blank charts for 30 seconds until day 1 completes — a poor first impression.
 
 ### 10.3 Event log (simplified)
 
@@ -1134,6 +1182,192 @@ Complete Phase 1. A single village of Utility AI villagers surviving (or dying) 
 
 ---
 
+## Step 14: In-App Acceptance Criteria Checklist
+
+**Goal:** A built-in diagnostic panel that auto-detects Phase 1 acceptance criteria at runtime, providing instant pass/fail feedback without leaving the browser.
+
+### 14.1 Overview
+
+The checklist is a collapsible panel accessible via a button in the top bar (e.g., a small checkmark icon). When opened, it runs a series of automated checks against the live simulation state, the Zustand store, and — for behavioral checks — headless micro-simulations in the background. Each criterion shows a pass/fail/running/skipped status.
+
+This serves two purposes:
+1. **During development:** Quick smoke test after each implementation step — no need to remember what to verify manually.
+2. **As a demo feature:** Shows the simulation is well-tested and self-aware.
+
+### 14.2 Check runner (`src/utils/acceptance-checks.ts`)
+
+```ts
+export type CheckStatus = 'pass' | 'fail' | 'running' | 'skipped' | 'pending';
+
+export interface AcceptanceCheck {
+  id: string;
+  /** Short label for the checklist row */
+  label: string;
+  /** Longer description shown on hover or expand */
+  description: string;
+  /** Which category this check belongs to */
+  category: 'simulation' | 'ui' | 'controls' | 'ai-behavior' | 'build';
+  /** Whether this check can be auto-detected at runtime */
+  autoDetect: boolean;
+  /** Run the check. Returns pass/fail and an optional detail message. */
+  run: (context: CheckContext) => Promise<CheckResult>;
+}
+
+export interface CheckContext {
+  /** Current simulation store state */
+  storeState: {
+    simState: SimulationState | null;
+    isRunning: boolean;
+    speed: number;
+    seed: number;
+  };
+  /** Access to create headless simulation engines for behavioral checks */
+  createEngine: (config: SimulationConfig) => SimulationEngine;
+}
+
+export interface CheckResult {
+  status: 'pass' | 'fail';
+  detail?: string;
+}
+```
+
+### 14.3 Auto-detectable checks (12 of 15 criteria)
+
+Each check below maps to one or more acceptance criteria. The `run` function describes the detection logic.
+
+#### Category: Simulation Core
+
+| # | Criterion | Check ID | Auto-Detection Logic |
+|---|-----------|----------|---------------------|
+| 1 | Simulation initializes with 10 villagers on 64×64 world | `sim-init` | Create a headless engine with default config. Assert `state.villagers.length === 10`, `state.world.width === 64`, `state.world.height === 64`. |
+| 2 | Seed produces reproducible runs | `seed-determinism` | Create two engines with seed 42, run both for 100 ticks. Assert `JSON.stringify(state1.stockpile) === JSON.stringify(state2.stockpile)` and villager positions match. |
+| 3 | Villagers survive 15+ days on balanced seed | `survival-15-days` | Create engine with seed 42, run for `15 × 30 = 450` ticks. Assert `state.villagers.filter(v => v.alive).length > 0`. |
+| 4 | Simulation ends gracefully (all dead) | `graceful-end` | Create engine with seed 42, run for 5000 ticks (or until `isOver`). Assert `isOver === true` and no thrown errors. If villagers are still alive at 5000 ticks, that's still a pass (they're doing well) — mark as pass with detail "Village still alive at tick 5000". |
+| 5 | Day/night cycle toggles | `day-night-cycle` | Create engine, run for 35 ticks (just past one full day). Assert that both `'day'` and `'night'` values were observed across ticks. |
+| 6 | No NaN/out-of-bounds after 1000 ticks | `stress-invariants` | Create engine with random seed, run 1000 ticks. Each tick: assert no NaN in needs, no positions outside [0, 64), no negative stockpile values. |
+
+#### Category: AI Behavior
+
+| # | Criterion | Check ID | Auto-Detection Logic |
+|---|-----------|----------|---------------------|
+| 7 | Utility AI makes reasonable decisions | `ai-reasonable` | Create engine, run 100 ticks. Assert that villagers performed at least 3 distinct action types (not just idle). Assert food stockpile > 0 at tick 100. |
+| 8 | AI scores produce deterministic output | `ai-deterministic` | Create two engines with same seed, run 50 ticks each. Assert every villager's `currentAction` and `position` match at tick 50. |
+
+#### Category: UI Components
+
+These checks query the live DOM to verify components are rendered. They only run when the simulation is active (store has a non-null state).
+
+| # | Criterion | Check ID | Auto-Detection Logic |
+|---|-----------|----------|---------------------|
+| 9 | KPI cards rendered | `ui-kpi-cards` | Query DOM for elements with `data-testid="kpi-card"`. Assert count >= 4 (population, prosperity, resources, health). |
+| 10 | Charts rendered | `ui-charts` | Query DOM for Recharts SVG containers (`.recharts-wrapper`). Assert count >= 4. |
+| 11 | Event log rendered with entries | `ui-event-log` | Query DOM for `data-testid="event-log"`. Assert it exists. If simulation has run past day 1, assert it has > 0 child entries. |
+| 12 | Speed control works | `ui-speed-control` | Read `store.speed`, verify it's one of `[1, 2, 4, 8]`. Check that a DOM element with `data-testid="speed-control"` exists. |
+
+#### Category: Build/Static (Manual — not auto-detectable in-app)
+
+| # | Criterion | Check ID | Auto-Detection Logic |
+|---|-----------|----------|---------------------|
+| 13 | All tests pass (`npx vitest run`) | `tests-pass` | **Manual.** Cannot run Vitest inside the browser. Marked `autoDetect: false`. Checklist shows a "Run in terminal" hint. |
+| 14 | No DOM imports in simulation/utils | `dom-free` | **Manual.** Static analysis task. Marked `autoDetect: false`. Checklist shows "Verified by dom-free.test.ts". |
+| 15 | Clean production build | `build-clean` | **Manual.** Cannot run `npm run build` from the browser. Marked `autoDetect: false`. Checklist shows "Run `npm run build` in terminal". |
+
+### 14.4 Component (`src/components/AcceptanceChecklist.tsx`)
+
+```tsx
+interface ChecklistState {
+  results: Map<string, { status: CheckStatus; detail?: string }>;
+  isOpen: boolean;
+  isRunning: boolean;
+}
+```
+
+**UI structure:**
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Phase 1 Acceptance Criteria       [Run All] [Close]│
+├─────────────────────────────────────────────────────┤
+│  ▼ Simulation Core (6 checks)             5/6 pass  │
+│    ✅ Simulation initializes correctly               │
+│    ✅ Seed determinism                               │
+│    ✅ Villagers survive 15+ days                     │
+│    ✅ Graceful end                    Still alive ... │
+│    ✅ Day/night cycle                                │
+│    ✅ Stress invariants (1000 ticks)                 │
+│                                                      │
+│  ▼ AI Behavior (2 checks)                 2/2 pass  │
+│    ✅ Reasonable decisions                           │
+│    ✅ Deterministic AI output                        │
+│                                                      │
+│  ▼ UI Components (4 checks)               4/4 pass  │
+│    ✅ KPI cards rendered (4 found)                   │
+│    ✅ Charts rendered (4 found)                      │
+│    ✅ Event log with entries                         │
+│    ✅ Speed control present                          │
+│                                                      │
+│  ▼ Build/Static (3 checks)               — manual   │
+│    ⬜ Tests pass           Run `npx vitest run`      │
+│    ⬜ DOM-free constraint  Verified by test suite     │
+│    ⬜ Clean production build  Run `npm run build`    │
+│                                                      │
+│  ──────────────────────────────────────────────────  │
+│  Total: 12/12 auto-checks passed | 3 manual         │
+└─────────────────────────────────────────────────────┘
+```
+
+**Behavior:**
+
+1. **"Run All" button** — Executes all auto-detectable checks sequentially. Headless simulation checks run first (they're CPU-bound), then UI checks (instant DOM queries). Shows a progress indicator.
+2. **Individual re-run** — Click any check row to re-run just that check.
+3. **Status icons** — `✅` pass, `❌` fail, `⏳` running, `⬜` manual/pending.
+4. **Detail expansion** — Click a check to see its `detail` string (e.g., "Village survived to day 42 with 7 alive" or "Mismatch at tick 37: villager-3 position differs").
+5. **Category summaries** — Each category header shows `N/M pass`.
+6. **Persistent state** — Check results persist in component state until "Run All" is clicked again. They do not auto-run on mount (headless sims are expensive).
+
+### 14.5 Integration
+
+- Add a small checkmark/clipboard icon button to `<TopBar />` that toggles the checklist panel.
+- The panel renders as a fixed sidebar or modal overlay so it doesn't interfere with the dashboard layout.
+- Add `data-testid` attributes to KPI cards, charts, event log, and speed control in their respective components (Steps 10–11) so the UI checks can find them.
+
+### 14.6 Headless check performance
+
+The behavioral checks (survival, determinism, stress) create headless `SimulationEngine` instances and run them synchronously. Expected performance:
+
+| Check | Ticks | Expected Time |
+|-------|-------|---------------|
+| `sim-init` | 0 | < 5ms |
+| `seed-determinism` | 200 (2 × 100) | < 50ms |
+| `survival-15-days` | 450 | < 100ms |
+| `graceful-end` | up to 5000 | < 500ms |
+| `day-night-cycle` | 35 | < 10ms |
+| `stress-invariants` | 1000 | < 200ms |
+| `ai-reasonable` | 100 | < 30ms |
+| `ai-deterministic` | 100 (2 × 50) | < 30ms |
+
+Total headless budget: < 1 second. All UI checks are instant DOM queries. "Run All" completes in ≈ 1 second.
+
+If any check exceeds 2 seconds, it should be moved to a Web Worker in a future optimization pass. For Phase 1, synchronous execution on the main thread is acceptable given the small tick counts.
+
+### 14.7 Test IDs required from other steps
+
+The following `data-testid` attributes must be added to components in Steps 10–11:
+
+| Component | `data-testid` | Step |
+|-----------|---------------|------|
+| `KPICard` | `kpi-card` | 10 |
+| Each Recharts chart wrapper div | `chart-population`, `chart-resources`, `chart-activity`, `chart-prosperity` | 10 |
+| `EventLog` container | `event-log` | 10 |
+| Event log entry elements | `event-log-entry` | 10 |
+| Speed control element | `speed-control` | 11 |
+
+### Deliverable
+
+A self-contained diagnostic panel that auto-validates 12 of 15 acceptance criteria at runtime, with clear guidance for the 3 manual checks.
+
+---
+
 ## Architecture Rules & Constraints
 
 These rules apply from Phase 1 onward and prevent costly refactors later.
@@ -1193,7 +1427,8 @@ ai-colony/
 │   │   ├── seed.ts
 │   │   ├── noise.ts
 │   │   ├── pathfinding.ts
-│   │   └── scoring.ts
+│   │   ├── scoring.ts
+│   │   └── acceptance-checks.ts
 │   ├── store/
 │   │   └── simulation-store.ts
 │   ├── views/
@@ -1201,7 +1436,8 @@ ai-colony/
 │   └── components/
 │       ├── TopBar.tsx
 │       ├── KPICard.tsx
-│       └── EventLog.tsx
+│       ├── EventLog.tsx
+│       └── AcceptanceChecklist.tsx
 └── tests/
     ├── seed.test.ts
     ├── noise.test.ts
