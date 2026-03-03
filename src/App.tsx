@@ -17,7 +17,9 @@ function App() {
         </main>
       </ErrorBoundary>
       {showChecklist && (
-        <AcceptanceChecklist onClose={() => setShowChecklist(false)} />
+        <ErrorBoundary>
+          <AcceptanceChecklist onClose={() => setShowChecklist(false)} />
+        </ErrorBoundary>
       )}
     </div>
   )

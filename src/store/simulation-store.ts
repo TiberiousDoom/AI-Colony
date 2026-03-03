@@ -69,7 +69,13 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
 
     if (ticked) {
       const newState = engine.getState()
-      set({ state: { ...newState } as SimulationState })
+      set({
+        state: {
+          ...newState,
+          history: { daily: [...newState.history.daily] },
+          events: [...newState.events],
+        } as SimulationState,
+      })
 
       // Auto-pause when simulation ends
       if (newState.isOver) {
