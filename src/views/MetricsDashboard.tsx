@@ -1,5 +1,5 @@
 /**
- * Metrics Dashboard: the default "stealth mode" analytics view.
+ * Metrics Dashboard: side-by-side dual-village analytics view.
  */
 
 import {
@@ -9,21 +9,20 @@ import {
 import { useSimulationStore } from '../store/simulation-store.ts'
 import { KPICard } from '../components/KPICard.tsx'
 import { EventLog } from '../components/EventLog.tsx'
+import { QuickCompare } from '../components/QuickCompare.tsx'
 import type { VillagerAction } from '../simulation/villager.ts'
+import type { VillageState } from '../simulation/competition-engine.ts'
+import type { SimulationEvent } from '../simulation/simulation-engine.ts'
 
-const CHART_COLORS = {
-  population: '#4ade80',
-  food: '#facc15',
-  wood: '#a78bfa',
-  stone: '#94a3b8',
-  prosperity: '#3b82f6',
-  health: '#f87171',
+const VILLAGE_COLORS: Record<string, string> = {
+  utility: '#3b82f6',
+  bt: '#f97316',
 }
 
 export function MetricsDashboard() {
-  const state = useSimulationStore(s => s.state)
+  const compState = useSimulationStore(s => s.competitionState)
 
-  if (!state) {
+  if (!compState) {
     return (
       <div style={{
         display: 'flex',
@@ -38,32 +37,57 @@ export function MetricsDashboard() {
     )
   }
 
-  const { history, villagers, stockpile, events } = state
-  const daily = history.daily
-  const alive = villagers.filter(v => v.alive)
-  const latestSnapshot = daily[daily.length - 1]
+  const { villages, globalEvents } = compState
 
-  // Activity breakdown from live state
-  const activityData = computeActivityData(alive)
+  // Merge all events for the log
+  const allEvents: SimulationEvent[] = [
+    ...globalEvents,
+    ...villages.flatMap(v => v.events),
+  ].sort((a, b) => a.tick - b.tick)
+
+  const villageNames: Record<string, string> = {}
+  for (const v of villages) villageNames[v.id] = v.name
+
+  // Build overlaid chart data (by day)
+  const maxDays = Math.max(...villages.map(v => v.history.daily.length))
+  const chartData = buildOverlaidChartData(villages, maxDays)
 
   return (
     <div style={{
       display: 'grid',
       gridTemplateColumns: '1fr 280px',
-      gridTemplateRows: 'auto 1fr',
+      gridTemplateRows: 'auto 1fr auto',
       gap: 16,
       padding: 16,
       height: '100%',
       overflow: 'auto',
     }}>
-      {/* KPI Cards */}
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', gridColumn: '1 / -1' }}>
-        <KPICard label="Population" value={alive.length} color="#4ade80" />
-        <KPICard label="Prosperity" value={latestSnapshot?.prosperityScore ?? 0} color="#3b82f6" />
-        <KPICard label="Food" value={stockpile.food} color="#facc15" />
-        <KPICard label="Wood" value={stockpile.wood} color="#a78bfa" />
-        <KPICard label="Stone" value={stockpile.stone} color="#94a3b8" />
-        <KPICard label="Avg Health" value={latestSnapshot?.avgHealth ?? 0} color="#f87171" />
+      {/* KPI Cards — one row per village */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, gridColumn: '1 / -1' }}>
+        {villages.map(village => {
+          const alive = village.villagers.filter(v => v.alive)
+          const latestSnap = village.history.daily[village.history.daily.length - 1]
+          const color = VILLAGE_COLORS[village.id] ?? '#94a3b8'
+
+          return (
+            <div key={village.id} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{
+                fontSize: 12, color, fontWeight: 700,
+                textTransform: 'uppercase', letterSpacing: 1,
+                minWidth: 100, opacity: village.isEliminated ? 0.5 : 1,
+              }}>
+                {village.name}
+                {village.isEliminated && ' (X)'}
+              </div>
+              <KPICard label="Pop" value={alive.length} villageColor={color} eliminated={village.isEliminated} />
+              <KPICard label="Prosperity" value={latestSnap?.prosperityScore ?? 0} color="#3b82f6" villageColor={color} eliminated={village.isEliminated} />
+              <KPICard label="Food" value={village.stockpile.food} color="#facc15" villageColor={color} eliminated={village.isEliminated} />
+              <KPICard label="Wood" value={village.stockpile.wood} color="#a78bfa" villageColor={color} eliminated={village.isEliminated} />
+              <KPICard label="Stone" value={village.stockpile.stone} color="#94a3b8" villageColor={color} eliminated={village.isEliminated} />
+              <KPICard label="Health" value={latestSnap?.avgHealth ?? 0} color="#f87171" villageColor={color} eliminated={village.isEliminated} />
+            </div>
+          )
+        })}
       </div>
 
       {/* Charts */}
@@ -74,12 +98,23 @@ export function MetricsDashboard() {
             Population Over Time
           </div>
           <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={daily}>
+            <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
               <XAxis dataKey="day" stroke="#64748b" fontSize={11} />
               <YAxis stroke="#64748b" fontSize={11} />
               <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 4 }} />
-              <Line type="monotone" dataKey="population" stroke={CHART_COLORS.population} strokeWidth={2} dot={false} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              {villages.map(v => (
+                <Line
+                  key={v.id}
+                  type="monotone"
+                  dataKey={`${v.id}_pop`}
+                  name={v.name}
+                  stroke={VILLAGE_COLORS[v.id] ?? '#94a3b8'}
+                  strokeWidth={2}
+                  dot={false}
+                />
+              ))}
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -87,34 +122,51 @@ export function MetricsDashboard() {
         {/* Resource Stockpiles Chart */}
         <div data-testid="chart-resources" style={{ background: '#1e293b', borderRadius: 8, padding: 16 }}>
           <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
-            Resource Stockpiles
+            Food Stockpiles
           </div>
           <ResponsiveContainer width="100%" height={180}>
-            <AreaChart data={daily}>
+            <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
               <XAxis dataKey="day" stroke="#64748b" fontSize={11} />
               <YAxis stroke="#64748b" fontSize={11} />
               <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 4 }} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Area type="monotone" dataKey="food" stackId="1" fill={CHART_COLORS.food} stroke={CHART_COLORS.food} fillOpacity={0.6} />
-              <Area type="monotone" dataKey="wood" stackId="1" fill={CHART_COLORS.wood} stroke={CHART_COLORS.wood} fillOpacity={0.6} />
-              <Area type="monotone" dataKey="stone" stackId="1" fill={CHART_COLORS.stone} stroke={CHART_COLORS.stone} fillOpacity={0.6} />
-            </AreaChart>
+              {villages.map(v => (
+                <Line
+                  key={v.id}
+                  type="monotone"
+                  dataKey={`${v.id}_food`}
+                  name={`${v.name} Food`}
+                  stroke={VILLAGE_COLORS[v.id] ?? '#94a3b8'}
+                  strokeWidth={2}
+                  dot={false}
+                />
+              ))}
+            </LineChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Activity Breakdown Chart */}
+        {/* Activity Breakdown — side by side bars */}
         <div data-testid="chart-activity" style={{ background: '#1e293b', borderRadius: 8, padding: 16 }}>
           <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
             Current Activity
           </div>
           <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={activityData}>
+            <BarChart data={computeActivityData(villages)}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
               <XAxis dataKey="action" stroke="#64748b" fontSize={10} />
               <YAxis stroke="#64748b" fontSize={11} allowDecimals={false} />
               <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 4 }} />
-              <Bar dataKey="count" fill="#60a5fa" radius={[4, 4, 0, 0]} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              {villages.map(v => (
+                <Bar
+                  key={v.id}
+                  dataKey={v.id}
+                  name={v.name}
+                  fill={VILLAGE_COLORS[v.id] ?? '#94a3b8'}
+                  radius={[4, 4, 0, 0]}
+                />
+              ))}
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -125,33 +177,79 @@ export function MetricsDashboard() {
             Prosperity Score
           </div>
           <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={daily}>
+            <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
               <XAxis dataKey="day" stroke="#64748b" fontSize={11} />
               <YAxis stroke="#64748b" fontSize={11} />
               <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 4 }} />
-              <Line type="monotone" dataKey="prosperityScore" stroke={CHART_COLORS.prosperity} strokeWidth={2} dot={false} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              {villages.map(v => (
+                <Line
+                  key={v.id}
+                  type="monotone"
+                  dataKey={`${v.id}_prosperity`}
+                  name={v.name}
+                  stroke={VILLAGE_COLORS[v.id] ?? '#94a3b8'}
+                  strokeWidth={2}
+                  dot={false}
+                />
+              ))}
             </LineChart>
           </ResponsiveContainer>
         </div>
+
+        {/* Quick Compare */}
+        <QuickCompare villages={villages} />
       </div>
 
       {/* Event Log */}
       <div style={{ minHeight: 300 }}>
-        <EventLog events={events} />
+        <EventLog events={allEvents} villageNames={villageNames} />
       </div>
     </div>
   )
 }
 
-function computeActivityData(alive: readonly { currentAction: VillagerAction }[]) {
-  const counts = new Map<string, number>()
-  for (const v of alive) {
-    counts.set(v.currentAction, (counts.get(v.currentAction) ?? 0) + 1)
+function buildOverlaidChartData(villages: VillageState[], maxDays: number) {
+  const data: Record<string, unknown>[] = []
+
+  for (let i = 0; i < maxDays; i++) {
+    const entry: Record<string, unknown> = { day: i }
+    for (const village of villages) {
+      const snap = village.history.daily[i]
+      if (snap) {
+        entry[`${village.id}_pop`] = snap.population
+        entry[`${village.id}_food`] = snap.food
+        entry[`${village.id}_wood`] = snap.wood
+        entry[`${village.id}_stone`] = snap.stone
+        entry[`${village.id}_prosperity`] = snap.prosperityScore
+      }
+    }
+    data.push(entry)
   }
-  // Only show actions that have > 0 count, in a readable order
-  const order: VillagerAction[] = ['idle', 'forage', 'eat', 'rest', 'chop_wood', 'haul', 'fish']
+
+  return data
+}
+
+function computeActivityData(villages: VillageState[]) {
+  const order: VillagerAction[] = [
+    'idle', 'forage', 'eat', 'rest', 'chop_wood', 'mine_stone',
+    'haul', 'fish', 'flee', 'build_shelter', 'build_storage', 'warm_up',
+  ]
+
   return order
-    .filter(a => (counts.get(a) ?? 0) > 0)
-    .map(a => ({ action: a, count: counts.get(a) ?? 0 }))
+    .filter(action => {
+      return villages.some(v => {
+        const alive = v.villagers.filter(x => x.alive)
+        return alive.some(x => x.currentAction === action)
+      })
+    })
+    .map(action => {
+      const entry: Record<string, unknown> = { action }
+      for (const village of villages) {
+        const alive = village.villagers.filter(x => x.alive)
+        entry[village.id] = alive.filter(x => x.currentAction === action).length
+      }
+      return entry
+    })
 }

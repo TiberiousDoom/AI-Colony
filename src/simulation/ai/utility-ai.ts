@@ -23,16 +23,22 @@ interface ActionWeights {
   hunger: number
   energy: number
   health: number
+  warmth: number
 }
 
 const WEIGHTS: Record<string, ActionWeights> = {
-  forage:    { hunger: 0.8, energy: 0.1, health: 0.3 },
-  eat:       { hunger: 1.0, energy: 0.0, health: 0.4 },
-  rest:      { hunger: 0.0, energy: 1.0, health: 0.2 },
-  chop_wood: { hunger: 0.2, energy: 0.1, health: 0.1 },
-  haul:      { hunger: 0.3, energy: 0.1, health: 0.1 },
-  fish:      { hunger: 0.7, energy: 0.1, health: 0.3 },
-  idle:      { hunger: 0.0, energy: 0.0, health: 0.0 },
+  forage:        { hunger: 0.8, energy: 0.1, health: 0.3, warmth: 0.0 },
+  eat:           { hunger: 1.0, energy: 0.0, health: 0.4, warmth: 0.0 },
+  rest:          { hunger: 0.0, energy: 1.0, health: 0.2, warmth: 0.0 },
+  chop_wood:     { hunger: 0.2, energy: 0.1, health: 0.1, warmth: 0.0 },
+  haul:          { hunger: 0.3, energy: 0.1, health: 0.1, warmth: 0.0 },
+  fish:          { hunger: 0.7, energy: 0.1, health: 0.3, warmth: 0.0 },
+  idle:          { hunger: 0.0, energy: 0.0, health: 0.0, warmth: 0.0 },
+  mine_stone:    { hunger: 0.1, energy: 0.1, health: 0.1, warmth: 0.0 },
+  build_shelter: { hunger: 0.0, energy: 0.1, health: 0.2, warmth: 0.3 },
+  build_storage: { hunger: 0.0, energy: 0.1, health: 0.1, warmth: 0.0 },
+  warm_up:       { hunger: 0.0, energy: 0.0, health: 0.2, warmth: 1.0 },
+  flee:          { hunger: 0.0, energy: 0.0, health: 1.0, warmth: 0.0 },
 }
 
 // --- Score Calculation ---
@@ -43,20 +49,23 @@ function scoreAction(
   worldView: AIWorldView,
   rng: SeededRNG,
 ): { score: number; reason: string } {
-  const weights = WEIGHTS[action.type] ?? { hunger: 0, energy: 0, health: 0 }
+  const weights = WEIGHTS[action.type] ?? { hunger: 0, energy: 0, health: 0, warmth: 0 }
 
   const hunger = getNeed(villager as Villager, NeedType.Hunger)
   const energy = getNeed(villager as Villager, NeedType.Energy)
   const health = getNeed(villager as Villager, NeedType.Health)
+  const warmth = getNeed(villager as Villager, NeedType.Warmth)
 
   const hungerUrgency = urgencyCurve(hunger.current)
   const energyUrgency = urgencyCurve(energy.current)
   const healthUrgency = urgencyCurve(health.current)
+  const warmthUrgency = worldView.season === 'winter' ? urgencyCurve(warmth.current) : 0
 
   let needScore =
     weights.hunger * hungerUrgency +
     weights.energy * energyUrgency +
-    weights.health * healthUrgency
+    weights.health * healthUrgency +
+    weights.warmth * warmthUrgency
 
   // Environmental modifiers
   let envMod = 0
@@ -64,7 +73,7 @@ function scoreAction(
 
   // Night penalty for outdoor actions
   if (worldView.timeOfDay === 'night' &&
-      (action.type === 'forage' || action.type === 'chop_wood' || action.type === 'fish')) {
+      (action.type === 'forage' || action.type === 'chop_wood' || action.type === 'fish' || action.type === 'mine_stone')) {
     envMod -= 0.3
     reasons.push('night -0.3')
   }
@@ -99,6 +108,60 @@ function scoreAction(
     reasons.push('health emergency +0.5')
   }
 
+  // Emergency: very low warmth in winter
+  if (action.type === 'warm_up' && warmth.current < 20 && worldView.season === 'winter') {
+    envMod += 0.5
+    reasons.push('warmth emergency +0.5')
+  }
+
+  // Flee: predator active within 5 tiles
+  if (action.type === 'flee') {
+    const predator = worldView.activeEvents.find(e => e.type === 'predator')
+    if (predator) {
+      const px = worldView.campfirePosition.x + predator.relativePosition.dx
+      const py = worldView.campfirePosition.y + predator.relativePosition.dy
+      const dist = Math.abs(villager.position.x - px) + Math.abs(villager.position.y - py)
+      if (dist <= 5) {
+        envMod += 2.0
+        reasons.push('predator nearby +2.0')
+      }
+    }
+  }
+
+  // Build shelter: high when population > shelter capacity
+  if (action.type === 'build_shelter') {
+    const shelterCount = worldView.structures.filter(s => s.type === 'shelter').length
+    const shelterCap = shelterCount * 3
+    const pop = worldView.villagers.filter(v => v.alive).length
+    if (pop > shelterCap && worldView.stockpile.wood >= 20) {
+      envMod += 0.4
+      reasons.push('need shelter +0.4')
+    }
+  }
+
+  // Build storage: moderate when nearing cap
+  if (action.type === 'build_storage') {
+    const hasStorage = worldView.structures.some(s => s.type === 'storage')
+    if (!hasStorage && (worldView.stockpile.food > 80 || worldView.stockpile.wood > 80)) {
+      if (worldView.stockpile.wood >= 15 && worldView.stockpile.stone >= 10) {
+        envMod += 0.3
+        reasons.push('need storage +0.3')
+      }
+    }
+  }
+
+  // Mine stone: bonus when low stone and storage needed
+  if (action.type === 'mine_stone' && worldView.stockpile.stone < 15) {
+    envMod += 0.2
+    reasons.push('low stone +0.2')
+  }
+
+  // Autumn stockpiling bonus
+  if (worldView.season === 'autumn' && (action.type === 'forage' || action.type === 'fish' || action.type === 'chop_wood')) {
+    envMod += 0.15
+    reasons.push('autumn prep +0.15')
+  }
+
   // Small random noise to break ties
   const noise = rng.nextFloat(0, 0.1)
 
@@ -125,8 +188,21 @@ function findNearestForest(villager: Readonly<Villager>, worldView: AIWorldView)
   return { x: tiles[0].x, y: tiles[0].y }
 }
 
+function findNearestStone(villager: Readonly<Villager>, worldView: AIWorldView): Position | undefined {
+  const tiles = worldView.world.findTilesInRadius(
+    villager.position.x, villager.position.y, 15,
+    t => t.type === TileType.Stone && t.resourceAmount > 0,
+  )
+  if (tiles.length === 0) return undefined
+  tiles.sort((a, b) => {
+    const da = Math.abs(a.x - villager.position.x) + Math.abs(a.y - villager.position.y)
+    const db = Math.abs(b.x - villager.position.x) + Math.abs(b.y - villager.position.y)
+    return da - db
+  })
+  return { x: tiles[0].x, y: tiles[0].y }
+}
+
 function findNearestWaterAdjacent(villager: Readonly<Villager>, worldView: AIWorldView): Position | undefined {
-  // Find passable tiles adjacent to water
   const candidates: Position[] = []
   const tiles = worldView.world.findTilesInRadius(
     villager.position.x, villager.position.y, 15,
@@ -158,12 +234,32 @@ function findTargetForAction(
     case 'forage':
     case 'chop_wood':
       return findNearestForest(villager, worldView)
+    case 'mine_stone':
+      return findNearestStone(villager, worldView)
     case 'fish':
       return findNearestWaterAdjacent(villager, worldView)
     case 'eat':
     case 'rest':
     case 'haul':
+    case 'build_shelter':
+    case 'build_storage':
+    case 'warm_up':
       return { ...worldView.campfirePosition }
+    case 'flee': {
+      // Flee away from predator
+      const predator = worldView.activeEvents.find(e => e.type === 'predator')
+      if (predator) {
+        const px = worldView.campfirePosition.x + predator.relativePosition.dx
+        const py = worldView.campfirePosition.y + predator.relativePosition.dy
+        // Move to campfire (safe zone) or away from predator
+        const dx = villager.position.x - px
+        const dy = villager.position.y - py
+        const targetX = Math.max(0, Math.min(worldView.world.width - 1, villager.position.x + Math.sign(dx) * 8))
+        const targetY = Math.max(0, Math.min(worldView.world.height - 1, villager.position.y + Math.sign(dy) * 8))
+        return { x: targetX, y: targetY }
+      }
+      return { ...worldView.campfirePosition }
+    }
     default:
       return undefined
   }
@@ -181,7 +277,6 @@ export class UtilityAI implements IAISystem {
     let bestReason = 'idle: fallback'
 
     for (const action of actions) {
-      // Skip actions that can't be performed (but still score them if they need a target)
       const { score, reason } = scoreAction(action, villager, worldView, rng)
 
       if (score > bestScore) {

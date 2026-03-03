@@ -17,7 +17,7 @@ export enum NeedType {
   Hunger = 'hunger',
   Energy = 'energy',
   Health = 'health',
-  // Warmth = 'warmth',    // Phase 2
+  Warmth = 'warmth',
   // Cooling = 'cooling',  // Phase 5
 }
 
@@ -29,6 +29,10 @@ export interface NeedState {
 }
 
 export type NeedsMap = Map<NeedType, NeedState>
+
+// --- Season type (re-exported here to avoid circular dep) ---
+
+export type Season = 'spring' | 'summer' | 'autumn' | 'winter'
 
 // --- Actions ---
 
@@ -42,7 +46,8 @@ export type VillagerAction =
   | 'haul'
   | 'fish'
   | 'flee'
-  | 'build'
+  | 'build_shelter'
+  | 'build_storage'
   | 'warm_up'
 
 // --- Villager ---
@@ -89,6 +94,7 @@ function createDefaultNeeds(): NeedsMap {
   needs.set(NeedType.Hunger, { current: 75, drainRate: 2.0, min: 0, max: 100 })
   needs.set(NeedType.Energy, { current: 75, drainRate: 1.0, min: 0, max: 100 })
   needs.set(NeedType.Health, { current: 75, drainRate: 0, min: 0, max: 100 })
+  needs.set(NeedType.Warmth, { current: 75, drainRate: 0, min: 0, max: 100 })
   return needs
 }
 
@@ -121,7 +127,6 @@ export function createStartingVillagers(
 
   const villagers: Villager[] = []
   for (let i = 0; i < count; i++) {
-    // Spread villagers within the 7×7 starting clearing
     const offsetX = rng.nextInt(-3, 3)
     const offsetY = rng.nextInt(-3, 3)
     villagers.push(
@@ -153,22 +158,35 @@ export function clampNeed(need: NeedState): void {
 }
 
 /**
- * Apply base need drain for one tick and handle starvation/recovery.
+ * Apply base need drain for one tick and handle starvation/exposure/recovery.
+ * Season defaults to 'summer' for backward compatibility with Phase 1 tests.
  */
-export function tickNeeds(villager: Villager): void {
+export function tickNeeds(villager: Villager, season: Season = 'summer'): void {
   if (!villager.alive) return
 
   const hunger = getNeed(villager, NeedType.Hunger)
   const energy = getNeed(villager, NeedType.Energy)
   const health = getNeed(villager, NeedType.Health)
+  const warmth = getNeed(villager, NeedType.Warmth)
 
   // Base drain
   hunger.current -= hunger.drainRate
   energy.current -= energy.drainRate
 
+  // Warmth drain: 3/tick in winter, 0 otherwise
+  if (season === 'winter') {
+    warmth.current -= 3
+  }
+
   // Starvation damage
   if (hunger.current <= 0) {
     hunger.current = 0
+    health.current -= 1.0
+  }
+
+  // Exposure damage (warmth depleted during winter)
+  if (warmth.current <= 0 && season === 'winter') {
+    warmth.current = 0
     health.current -= 1.0
   }
 
@@ -180,6 +198,7 @@ export function tickNeeds(villager: Villager): void {
   clampNeed(hunger)
   clampNeed(energy)
   clampNeed(health)
+  clampNeed(warmth)
 
   // Death check
   if (health.current <= 0) {

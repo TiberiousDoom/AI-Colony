@@ -14,6 +14,10 @@ function makeWorldView(overrides?: Partial<AIWorldView>): AIWorldView {
     tick: 0,
     timeOfDay: 'day' as const,
     campfirePosition: world.campfirePosition,
+    season: 'summer',
+    structures: [],
+    activeEvents: [],
+    villageId: 'test',
     ...overrides,
   }
 }

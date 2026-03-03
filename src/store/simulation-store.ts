@@ -1,16 +1,18 @@
 /**
- * Zustand store: bridges the simulation engine and the React UI.
+ * Zustand store: bridges the competition engine and the React UI.
+ * Supports both single-village and dual-village (competition) modes.
  */
 
 import { create } from 'zustand'
-import { SimulationEngine, type SimulationState, type SimulationConfig } from '../simulation/simulation-engine.ts'
+import { CompetitionEngine, type CompetitionState, type CompetitionConfig } from '../simulation/competition-engine.ts'
 import { UtilityAI } from '../simulation/ai/utility-ai.ts'
+import { BehaviorTreeAI } from '../simulation/ai/behavior-tree-ai.ts'
 
 const TICK_INTERVAL_MS = 1000 // 1 tick per second at 1× speed
 
 interface SimulationStore {
-  /** Current simulation state */
-  state: SimulationState | null
+  /** Current competition state */
+  competitionState: CompetitionState | null
   /** Is the simulation currently running? */
   isRunning: boolean
   /** Current speed multiplier */
@@ -27,7 +29,7 @@ interface SimulationStore {
   setSeed: (seed: number) => void
 }
 
-let engine: SimulationEngine | null = null
+let engine: CompetitionEngine | null = null
 let animFrameId: number | null = null
 let lastTimestamp = 0
 let accumulator = 0
@@ -70,11 +72,15 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
     if (ticked) {
       const newState = engine.getState()
       set({
-        state: {
+        competitionState: {
           ...newState,
-          history: { daily: [...newState.history.daily] },
-          events: [...newState.events],
-        } as SimulationState,
+          villages: newState.villages.map(v => ({
+            ...v,
+            history: { daily: [...v.history.daily] },
+            events: [...v.events],
+          })),
+          globalEvents: [...newState.globalEvents],
+        } as CompetitionState,
       })
 
       // Auto-pause when simulation ends
@@ -89,21 +95,33 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
   }
 
   return {
-    state: null,
+    competitionState: null,
     isRunning: false,
     speed: 1,
     seed: Math.floor(Math.random() * 1000000),
 
     init(seed: number) {
-      const config: SimulationConfig = {
+      const config: CompetitionConfig = {
         seed,
         worldWidth: 64,
         worldHeight: 64,
-        aiSystem: new UtilityAI(),
-        villagerCount: 10,
+        villages: [
+          {
+            id: 'utility',
+            name: 'Utility AI',
+            aiSystem: new UtilityAI(),
+            villagerCount: 10,
+          },
+          {
+            id: 'bt',
+            name: 'Behavior Tree',
+            aiSystem: new BehaviorTreeAI(),
+            villagerCount: 10,
+          },
+        ],
       }
-      engine = new SimulationEngine(config)
-      set({ state: { ...engine.getState() } as SimulationState, seed })
+      engine = new CompetitionEngine(config)
+      set({ competitionState: { ...engine.getState() } as CompetitionState, seed })
     },
 
     start() {
@@ -127,7 +145,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
       const store = get()
       if (engine) {
         engine.reset()
-        set({ state: { ...engine.getState() } as SimulationState, isRunning: false })
+        set({ competitionState: { ...engine.getState() } as CompetitionState, isRunning: false })
       } else {
         store.init(store.seed)
         set({ isRunning: false })

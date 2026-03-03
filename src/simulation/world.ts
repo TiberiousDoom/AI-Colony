@@ -4,7 +4,7 @@
 
 import { createRNG, type SeededRNG } from '../utils/seed.ts'
 import { createNoise2D, fractalNoise } from '../utils/noise.ts'
-import type { Position } from './villager.ts'
+import type { Position, Season } from './villager.ts'
 
 // --- Tile Types ---
 
@@ -46,6 +46,9 @@ export class World {
   readonly tiles: Tile[][]
   readonly seed: number
   readonly campfirePosition: Position
+
+  /** Blighted tiles: "x,y" → ticks remaining until recovery */
+  blightTiles: Map<string, number> = new Map()
 
   constructor(config: WorldConfig) {
     this.width = config.width
@@ -105,16 +108,59 @@ export class World {
     return results
   }
 
-  /** Advance resource regeneration for one tick. */
-  tickRegeneration(): void {
+  /**
+   * Advance resource regeneration for one tick.
+   * Season defaults to 'summer' for backward compatibility with Phase 1 tests.
+   */
+  tickRegeneration(season: Season = 'summer'): void {
+    // Process blight timers
+    for (const [key, remaining] of this.blightTiles) {
+      if (remaining <= 1) {
+        // Blight expired — restore tile
+        this.blightTiles.delete(key)
+        const [x, y] = key.split(',').map(Number)
+        const tile = this.tiles[y]?.[x]
+        if (tile && tile.type === TileType.Forest) {
+          tile.resourceAmount = tile.maxResource
+        }
+      } else {
+        this.blightTiles.set(key, remaining - 1)
+      }
+    }
+
+    // Winter: no regeneration
+    if (season === 'winter') return
+
+    const regenMult = season === 'spring' ? 2 : 1
+
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
         const tile = this.tiles[y][x]
         if (tile.regenRate > 0 && tile.resourceAmount < tile.maxResource) {
+          // Don't regen blighted tiles
+          if (this.blightTiles.has(`${x},${y}`)) continue
           tile.resourceAmount = Math.min(
             tile.maxResource,
-            tile.resourceAmount + tile.regenRate,
+            tile.resourceAmount + tile.regenRate * regenMult,
           )
+        }
+      }
+    }
+  }
+
+  /** Apply blight: destroy resources in radius, set recovery timer */
+  applyBlight(cx: number, cy: number, radius: number, durationTicks: number): void {
+    const minX = Math.max(0, cx - radius)
+    const maxX = Math.min(this.width - 1, cx + radius)
+    const minY = Math.max(0, cy - radius)
+    const maxY = Math.min(this.height - 1, cy + radius)
+
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        const tile = this.tiles[y][x]
+        if (tile.type === TileType.Forest && tile.resourceAmount > 0) {
+          tile.resourceAmount = 0
+          this.blightTiles.set(`${x},${y}`, durationTicks)
         }
       }
     }
@@ -131,7 +177,6 @@ function generateWorld(
   const noiseRng = rng.fork()
   const noise = createNoise2D(noiseRng)
 
-  // Scale factor for noise sampling — controls terrain feature size
   const scale = 0.08
 
   const tiles: Tile[][] = []
@@ -231,10 +276,7 @@ function validateOrRegenerate(tiles: Tile[][], width: number, height: number): v
     }
   }
 
-  // If distribution is off, patch minimally rather than full regen
-  // (full regen with perturbed seed would require reconstructing — patch is simpler)
   if (forestCount / total < 0.15) {
-    // Convert some grass tiles to forest until we hit 15%
     const needed = Math.ceil(total * 0.15) - forestCount
     let converted = 0
     for (let y = 0; y < height && converted < needed; y++) {
@@ -261,7 +303,6 @@ function validateOrRegenerate(tiles: Tile[][], width: number, height: number): v
   }
 
   if (waterCount === 0) {
-    // Place a small pond near the edge
     const px = Math.min(5, width - 1)
     const py = Math.min(5, height - 1)
     tiles[py][px] = createTile(TileType.Water, px, py)

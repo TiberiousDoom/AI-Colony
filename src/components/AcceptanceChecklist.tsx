@@ -22,7 +22,7 @@ export function AcceptanceChecklist({ onClose }: { onClose: () => void }) {
   const [isRunning, setIsRunning] = useState(false)
 
   const storeState = useSimulationStore(useShallow(s => ({
-    simState: s.state,
+    simState: s.competitionState,
     isRunning: s.isRunning,
     speed: s.speed,
     seed: s.seed,
