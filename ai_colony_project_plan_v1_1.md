@@ -1,6 +1,6 @@
 # AI Colony: Competitive Village Simulation — Project Plan
 
-**Version:** 1.1
+**Version:** 1.2
 **Date:** March 3, 2026
 
 ---
@@ -163,6 +163,55 @@ A composite metric for comparison, calculated every in-game day:
 - **structure_variety_bonus:** +10 for each unique structure type built (rewards diversification over spamming shelters)
 - **days_survived x 0.5:** Small steady bonus for longevity
 
+### Simulation End Conditions
+
+The simulation needs explicit rules for when a village is eliminated and when the overall simulation ends, rather than running indefinitely or relying solely on the user pressing stop.
+
+**Village elimination:**
+
+- A village is eliminated when its population reaches 0 (all villagers dead)
+- Elimination triggers a notable event in the event log with a timestamp and cause-of-death summary (e.g., "Village A eliminated — starvation during winter, day 47")
+- The eliminated village's metrics freeze on the dashboard but remain visible for comparison
+- In multi-village mode, the simulation continues as long as at least one village survives
+
+**Simulation end triggers:**
+
+- **All villages eliminated:** Simulation ends automatically. No winner — results summary shows comparative analysis of how long each survived and why each failed
+- **Last village standing:** If all but one village is eliminated, the surviving village is declared the winner. Simulation continues for a configurable "victory lap" period (default: 10 more in-game days) so the user can see final metrics, then transitions to the results summary
+- **User-defined time limit:** Optional setting on the setup screen — run for N in-game days (default: unlimited). When the limit is reached, the simulation ends and all surviving villages are compared on prosperity score
+- **Manual stop:** User clicks stop at any time. Treated the same as a time limit — compare all surviving villages
+
+**Edge cases:**
+
+- **Simultaneous elimination:** If two villages hit 0 population on the same tick, both are eliminated simultaneously. The event log notes the tie. Neither is declared a winner
+- **Stalemate detection:** If no village's prosperity score has changed by more than 5% over the last 30 in-game days, display a "stagnation warning" on the dashboard. This is informational only — the simulation does not auto-end, but it signals to the user that the interesting divergence may have already happened
+- **Total resource depletion:** If all harvestable resources on the map are exhausted and no regeneration is pending, log a "resource exhaustion" event. This scenario is unlikely with forest regrowth but possible on small maps or after extended runs
+- **Single villager remaining:** When a village is down to its last villager, log a "critical population" warning. The village cannot recover via population growth (requires shelter capacity + food surplus, and a single villager may not be able to sustain both), so this is effectively a slow elimination — but the simulation lets it play out rather than calling it early
+
+### Save/Load & Data Export
+
+Simulation state should be serializable for persistence and analysis. This avoids requiring users to re-run long simulations to revisit results.
+
+**Simulation snapshots (Phase 2):**
+
+- Serialize the full simulation state to JSON: world grid, all villager entities and their current state, village stockpiles, structure placements, event history, current tick number, RNG state, and active AI states
+- Save snapshots to browser localStorage with a user-provided label or auto-generated name (seed + timestamp)
+- Load a snapshot to resume a simulation from that exact point — useful for rewinding to a key moment and watching a different AI handle the same crisis
+- Storage budget: cap at 5 saved snapshots in localStorage (each estimated at 200–500 KB for a 64x64 map). Show storage usage and allow deletion of old snapshots
+- The RNG state must be captured so that loading a snapshot and pressing play produces the same sequence of events as the original run (deterministic replay)
+
+**Run export (Phase 4):**
+
+- After a simulation ends, export the full run as a downloadable JSON file containing: simulation config (seed, biome, AI types, time limit), tick-by-tick prosperity scores per village, event log, and final state snapshot
+- CSV export option for the metrics data specifically (one row per in-game day, columns for each village's prosperity, population, resources, structures) — easy to open in a spreadsheet for custom analysis
+- PNG export of the final prosperity chart — one-click screenshot of the key comparison graph for sharing
+
+**Evolved genome persistence (Phase 5):**
+
+- Trained genomes are saved separately from simulation snapshots — they represent hours of training and should not be lost
+- Export/import genome files (JSON) so users can share evolved strategies
+- Genome library: a dropdown on the setup screen listing all saved genomes with their training metadata (biome, generation count, best fitness)
+
 ---
 
 ## AI Systems
@@ -283,7 +332,8 @@ This is structurally similar to Utility AI, but the weights are not designed —
 - **Crossover:** Two parents produce offspring genomes via single-point crossover
 - **Mutation:** Each weight has a 5% chance of being perturbed by a random value in [-0.2, +0.2]
 - **Seeding:** Generation 0 starts with random genomes (uniformly distributed weights in [0, 1])
-- **Training mode:** Run N generations silently (fast-forward, no rendering) to pre-train a genome before competition. User can configure N (default: 50 generations)
+- **Training mode:** Run N generations silently (fast-forward, no rendering) to pre-train a genome before competition. User can configure N (default: 50 generations). Training runs in a Web Worker to keep the UI responsive
+- **Training UX:** The training progress UI should display: current generation number, estimated time remaining (based on average time per generation so far), best fitness score with a sparkline graph of fitness over generations, and a "Stop Early" button that halts training and uses the best genome found so far. If the user stops early, the genome is still fully usable — it just may not have converged to its best possible strategy. Additionally, display a convergence indicator: if the best fitness has not improved by more than 1% over the last 10 generations, show a "Plateaued" label suggesting the user can stop without losing much
 - **Competition mode:** The best genome from training competes against the other AI systems in a standard simulation run
 
 **Visualization in inspector:**
@@ -349,6 +399,8 @@ The 128x128 shared map uses the same noise-based generation but with guaranteed 
 - Day/night cycle (visual indication on dashboard via background color or icon, mechanical effect on action efficiency)
 - Seed display + input field for reproducible runs
 - Unit tests for simulation engine tick logic, pathfinding, and utility scoring
+- **Deterministic snapshot test:** Run a simulation with a fixed seed for exactly 100 ticks, then assert the exact world state (villager positions, need values, resource counts, stockpile totals). This single test catches regressions across the entire simulation pipeline — if any change to tick logic, pathfinding, action resolution, or utility scoring alters the outcome, this test fails. Update the snapshot whenever intentional behavior changes are made. This is the single most valuable test in the project and should be written as soon as the simulation loop is functional
+- **Stress test:** Run 1,000 ticks with a random seed and assert no crashes, no NaN values in villager attributes, no villagers outside map bounds, and no negative resource counts. This catches edge cases that a single snapshot test might miss
 
 **Milestone deliverable:** A single village of utility AI villagers surviving (or dying) on the metrics dashboard. Looks like a monitoring tool. Simulation is playable, watchable, and reproducible via seed.
 
@@ -368,6 +420,8 @@ The 128x128 shared map uses the same noise-based generation but with guaranteed 
 - Structures: shelter, storage (first buildable structures — build action now functional)
 - Quick-compare table (bottom strip of dashboard)
 - Unit tests for behavior tree evaluation and event mirroring
+- **Cross-AI determinism test:** Run identical seeds with Utility AI and Behavior Trees separately, verify that the world generation and event sequence are identical (only AI decisions should differ). This validates that the comparison is fair — both AI systems are reacting to the same world, not subtly different ones
+- **Event mirroring test:** Trigger each event type in a dual-village simulation and assert that both villages receive the event on the same tick with the same parameters (location offset, severity, duration)
 
 **Milestone deliverable:** Two villages competing on the dashboard. Clear divergence visible in metrics. Event log tells the story. Population growth and winter survival create meaningful strategic differentiation.
 
@@ -383,7 +437,7 @@ The 128x128 shared map uses the same noise-based generation but with guaranteed 
 - Seasonal visual changes (green to gold to brown to white palette shifts)
 - Minimap per village showing population density and resource distribution
 - Toggle between metrics view and simulation view (shared top bar)
-- Sprite asset pipeline: source PNGs to sprite sheet to PixiJS texture atlas
+- **Sprite asset pipeline:** Use `free-tex-packer-cli` (open source, no license cost) to pack individual 16x16 PNGs into optimized sprite sheets with a JSON atlas file. Add an npm script (`npm run pack-sprites`) that watches `src/assets/sprites/source/` and outputs packed sheets to `src/assets/sprites/packed/`. PixiJS loads the JSON atlas via `Assets.load()` which handles frame lookup automatically. This keeps the art workflow simple: drop a new PNG in the source folder, run the packer, and the sprite is available in-engine. For the initial Phase 3 sprite set (~30–40 individual frames across terrain, villagers, and structures), a single 256x256 sprite sheet should suffice
 
 **Milestone deliverable:** Full dual-view experience. Metrics dashboard as default, toggle to watch the villages visually. Click villagers to see their AI thinking in real time.
 
@@ -468,7 +522,7 @@ ai-colony/
 |   |       |-- behavior-tree.ts  # BT node definitions and evaluation
 |   |       |-- goap.ts           # GOAP planner (Phase 4)
 |   |       |-- evolutionary.ts   # Genome, training loop, evolution (Phase 5)
-|   |       +-- competition-aware.ts  # Shared competition signals (Phase 6)
+|   |       +-- competition-signals.ts  # Competition environment data for AI consumption (Phase 6)
 |   |-- training/
 |   |   |-- trainer.ts            # Headless generation runner (Phase 5)
 |   |   |-- fitness.ts            # Fitness evaluation functions (Phase 5)
@@ -497,9 +551,13 @@ ai-colony/
 |   |   |-- pathfinding.ts        # A* for villager movement
 |   |   |-- spatial.ts            # Spatial partitioning for proximity queries
 |   |   |-- scoring.ts            # Prosperity score calculation
-|   |   +-- seed.ts               # Seeded RNG utility
+|   |   |-- seed.ts               # Seeded RNG utility
+|   |   |-- serialization.ts     # Simulation state snapshot save/load (Phase 2)
+|   |   +-- export.ts             # JSON/CSV/PNG run export (Phase 4)
 |   |-- assets/
-|   |   +-- sprites/              # 16x16 pixel art sprite sheets
+|   |   +-- sprites/
+|   |       |-- source/           # Individual 16x16 PNGs (art source files)
+|   |       +-- packed/           # Generated sprite sheets + JSON atlas (Phase 3)
 |   |-- App.tsx
 |   +-- main.tsx
 |-- tests/
@@ -510,6 +568,9 @@ ai-colony/
 |   |-- goap.test.ts
 |   |-- genome.test.ts
 |   |-- events.test.ts
+|   |-- deterministic-snapshot.test.ts  # Fixed-seed 100-tick state assertion (Phase 1)
+|   |-- stress.test.ts                  # 1000-tick crash/NaN/bounds check (Phase 1)
+|   |-- event-mirroring.test.ts         # Cross-village event fairness (Phase 2)
 |   +-- benchmarks/
 |       +-- biome-benchmark.ts    # Automated multi-biome AI comparison (Phase 5)
 |-- index.html
@@ -535,6 +596,52 @@ Throughout development, the following patterns and systems should be built with 
 
 ---
 
+## Design Considerations
+
+### Competition Awareness Architecture (Phase 6)
+
+The file structure currently lists `competition-aware.ts` as a standalone module under `ai/`. In practice, competition awareness needs to integrate differently into each AI system — Utility AI needs a new scoring term, Behavior Trees need new condition nodes, GOAP needs new preconditions and possibly new actions, and Evolutionary AI needs additional genome inputs. A standalone module would either become a grab-bag of unrelated helpers or force an awkward adapter pattern.
+
+A better approach: define a `CompetitionSignals` interface in `ai-interface.ts` that provides each AI system with a standardized view of the competitive environment — nearby rival villagers, contested resource tiles, territory pressure scores. Each AI system then consumes these signals in its own idiomatic way:
+
+- **Utility AI:** Add a `competition_modifier` term to the scoring formula. When a resource tile has rival villagers nearby, reduce its score (the resource might be taken before you arrive). When an uncontested tile exists farther away, boost its score relative to a contested closer one
+- **Behavior Trees:** Add a new condition branch under Village Tasks: `Check: target resource is contested? -> Find uncontested alternative`. This slots naturally into the existing priority structure
+- **GOAP:** Add a `tile_is_uncontested` precondition to harvesting actions. When contested, the planner will automatically find alternative plans (different resource tiles, different action sequences) because the precondition fails on contested tiles. This is GOAP's strength — it handles disruption through replanning rather than explicit branching
+- **Evolutionary AI:** Add competition signal inputs to the genome's decision function (e.g., `genome[offset] x nearby_rival_count`). Evolution will discover whether to avoid rivals, race them, or ignore them entirely — this is one of the most interesting things to watch evolve
+
+The `competition-aware.ts` file should be renamed to `competition-signals.ts` and contain only the `CompetitionSignals` computation logic (scanning for nearby rivals, calculating contested tile maps, territory pressure). It provides data; each AI system decides what to do with it.
+
+### Prosperity Score Weighting
+
+The current prosperity formula weights population at ×10, which is significantly heavier than any other factor. This creates a scoring dynamic where:
+
+- **Early game (days 1–15):** Population is fixed at 10 (no growth yet — requires food surplus + shelter). The score is dominated by resource stockpiles (food ×0.3, wood ×0.2, stone ×0.2) and structures (×5 each). Differences between AI systems show up as resource management efficiency
+- **Mid game (days 15–30):** Population growth kicks in. Each new villager adds 10 points — equivalent to building two structures or stockpiling 50 food. The score begins tilting toward whichever AI system invests in shelters earlier
+- **Late game (days 30+):** Population dominates. A village with 20 villagers has a 100-point advantage over a village with 10, regardless of resource efficiency or infrastructure
+
+This isn't necessarily wrong — population growth *is* the strongest indicator of a thriving village. But it means the prosperity chart will show a relatively flat early period followed by exponential divergence once growth begins, which could make the early game metrics look uninteresting on the dashboard.
+
+**Recommendation:** Consider a normalized scoring variant displayed alongside the raw prosperity score — a "per-capita prosperity" metric that divides by population. This shows efficiency rather than scale and keeps the early-game comparison meaningful. The raw prosperity score remains the primary comparison metric, but per-capita prosperity reveals which AI system is running a *healthier* village rather than just a *bigger* one.
+
+### Variable-Length Need Vectors
+
+The current design has four hardcoded needs: hunger, energy, health, and warmth. The desert biome (Phase 5) adds a fifth: cooling. If future biomes or gameplay experiments add more needs (morale, hydration as distinct from hunger, etc.), the AI interface must handle this gracefully.
+
+**Problem:** If the AI interface hardcodes `hunger: number, energy: number, health: number, warmth: number` as separate fields, every new need requires changes to the interface, every AI implementation, every inspector panel, and every scoring function. This is fragile and scales poorly.
+
+**Recommendation:** Define needs as a `Map<NeedType, NeedState>` (or a typed record with a string enum key) rather than individual fields. The `NeedType` enum starts with `hunger | energy | health | warmth` and is extended per biome. Each `NeedState` contains the current value (0–100), drain rate, and replenishment sources.
+
+This affects each AI system:
+
+- **Utility AI:** The scoring formula already iterates over needs conceptually (`sum(need_weight x need_relevance x urgency_curve(need_value))`). Making this iteration literal over a `Map<NeedType, number>` is trivial and means new needs are automatically scored if weights are provided
+- **Behavior Trees:** The Critical Needs branch becomes a loop over active needs rather than hardcoded checks. Each need maps to a response action (warmth → warm up, cooling → find shade/well, hunger → eat). New needs require adding the mapping entry but not restructuring the tree
+- **GOAP:** Preconditions and effects reference needs by `NeedType` key rather than hardcoded field names. Adding a new need means defining new actions that affect it, which GOAP handles naturally
+- **Evolutionary AI:** The genome size becomes dynamic — `num_actions x num_active_needs x num_modifiers`. Training on a biome with more needs produces a larger genome. Genomes trained on one biome won't directly transfer to another with different needs, but this is actually interesting behavior to observe and discuss
+
+The AI interface in `ai-interface.ts` should define needs generically from day one, even though Phase 1 only uses hunger, energy, and health. This avoids a painful refactor when warmth is added in Phase 2 and cooling in Phase 5.
+
+---
+
 ## Open Questions & Future Ideas
 
 - **Multiplayer observation:** Could multiple people watch the same simulation in real time? (WebSocket sync, requires backend)
@@ -551,3 +658,4 @@ Throughout development, the following patterns and systems should be built with 
 |------|---------|---------|
 | 2026-03-03 | 1.0 | Initial project plan created from brainstorming session. Core concept, technical stack, simulation design, three AI systems, four development phases, and file structure defined. |
 | 2026-03-03 | 1.1 | Added Phase 5 (Evolutionary AI & Biomes) and Phase 6 (Shared World Mode). Fixed GOAP phase labeling. Moved population growth from Phase 4 to Phase 2. Added pathfinding to Phase 1 task list. Added explicit numeric values for villager attributes, action durations, structure costs, and prosperity score formula. Added testing strategy throughout all phases. Added Fish action and Well structure. Added Shovel Monster export notes section. Expanded file structure for new phases. Added Setup Screen to views. Updated open questions. Removed items promoted to phases from open questions list. |
+| 2026-03-03 | 1.2 | Added Simulation End Conditions section covering village elimination, end triggers, and edge cases (stalemate detection, simultaneous elimination, total resource depletion, single villager remaining). Added Save/Load & Data Export section with simulation snapshots (Phase 2), run export in JSON/CSV/PNG (Phase 4), and evolved genome persistence (Phase 5). Expanded evolutionary AI training UX with estimated time remaining, stop-early support, and convergence/plateau detection. Strengthened Phase 1 testing with deterministic snapshot test and stress test. Strengthened Phase 2 testing with cross-AI determinism and event mirroring tests. Specified sprite pipeline tooling (free-tex-packer-cli) in Phase 3. Added Design Considerations section covering competition awareness architecture (recommending CompetitionSignals interface over standalone module, renamed competition-aware.ts to competition-signals.ts), prosperity score weighting analysis with per-capita prosperity recommendation, and variable-length need vectors using Map<NeedType, NeedState> for biome extensibility. Updated file structure with serialization.ts, export.ts, sprite source/packed directories, and new test files. |
