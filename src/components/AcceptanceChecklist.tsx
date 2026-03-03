@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import {
   ALL_CHECKS, CATEGORIES,
   type CheckStatus, type CheckContext, type AcceptanceCheck,
@@ -20,12 +21,12 @@ export function AcceptanceChecklist({ onClose }: { onClose: () => void }) {
   const [results, setResults] = useState<Map<string, CheckState>>(new Map())
   const [isRunning, setIsRunning] = useState(false)
 
-  const storeState = useSimulationStore(s => ({
+  const storeState = useSimulationStore(useShallow(s => ({
     simState: s.state,
     isRunning: s.isRunning,
     speed: s.speed,
     seed: s.seed,
-  }))
+  })))
 
   const buildContext = useCallback((): CheckContext => ({
     storeState,
@@ -84,6 +85,7 @@ export function AcceptanceChecklist({ onClose }: { onClose: () => void }) {
       right: 0,
       bottom: 0,
       width: 480,
+      maxWidth: '100vw',
       background: '#0f172a',
       borderLeft: '1px solid #334155',
       zIndex: 1000,
