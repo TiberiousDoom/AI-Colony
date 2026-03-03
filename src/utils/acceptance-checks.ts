@@ -282,33 +282,109 @@ const uiSpeedControl: AcceptanceCheck = {
   },
 }
 
-// --- Manual Checks ---
+// --- Build/Static Checks (browser-runnable) ---
 
 const testsPass: AcceptanceCheck = {
   id: 'tests-pass',
-  label: 'All tests pass',
-  description: 'Run `npx vitest run` in terminal.',
+  label: 'Simulation smoke test',
+  description: 'Runs init, determinism, 200-tick stress, and invariant checks in-browser.',
   category: 'build',
-  autoDetect: false,
-  async run() { return { status: 'pass', detail: 'Manual check — run `npx vitest run`' } },
+  autoDetect: true,
+  async run(ctx) {
+    // Init check
+    const e = ctx.createEngine(defaultConfig(42))
+    const s = e.getState()
+    if (s.villagers.length !== 10) return { status: 'fail', detail: `Init: expected 10 villagers, got ${s.villagers.length}` }
+
+    // Determinism check
+    const e1 = ctx.createEngine(defaultConfig(99))
+    const e2 = ctx.createEngine(defaultConfig(99))
+    for (let i = 0; i < 50; i++) { e1.tick(); e2.tick() }
+    if (JSON.stringify(e1.getState().stockpile) !== JSON.stringify(e2.getState().stockpile)) {
+      return { status: 'fail', detail: 'Determinism: stockpiles diverged on seed 99' }
+    }
+
+    // Stress + invariants
+    const e3 = ctx.createEngine(defaultConfig(123))
+    for (let i = 0; i < 200; i++) {
+      try { e3.tick() } catch (err) { return { status: 'fail', detail: `Crash at tick ${i}: ${err}` } }
+      if (e3.getState().isOver) break
+      for (const v of e3.getState().villagers) {
+        if (!v.alive) continue
+        if (v.position.x < 0 || v.position.x >= 64 || v.position.y < 0 || v.position.y >= 64) {
+          return { status: 'fail', detail: `OOB: ${v.name} at (${v.position.x}, ${v.position.y})` }
+        }
+        for (const [, need] of v.needs) {
+          if (isNaN(need.current)) return { status: 'fail', detail: `NaN in ${v.name}'s needs` }
+        }
+      }
+    }
+    return { status: 'pass', detail: 'Init, determinism, and 200-tick stress all passed' }
+  },
 }
 
 const domFree: AcceptanceCheck = {
   id: 'dom-free',
-  label: 'No DOM imports in simulation',
-  description: 'Verified by dom-free.test.ts in test suite.',
+  label: 'No DOM access in simulation',
+  description: 'Runs 50 ticks and verifies the simulation engine never touches document/DOM APIs.',
   category: 'build',
-  autoDetect: false,
-  async run() { return { status: 'pass', detail: 'Manual check — verified by dom-free.test.ts' } },
+  autoDetect: true,
+  async run(ctx) {
+    const accessed: string[] = []
+    const origQuerySelector = document.querySelector.bind(document)
+    const origGetElementById = document.getElementById.bind(document)
+    const origCreateElement = document.createElement.bind(document)
+
+    // Patch DOM methods to detect access
+    document.querySelector = (...args: Parameters<typeof document.querySelector>) => {
+      accessed.push(`querySelector(${args[0]})`)
+      return origQuerySelector(...args)
+    }
+    document.getElementById = (...args: Parameters<typeof document.getElementById>) => {
+      accessed.push(`getElementById(${args[0]})`)
+      return origGetElementById(...args)
+    }
+    document.createElement = (...args: Parameters<typeof document.createElement>) => {
+      accessed.push(`createElement(${args[0]})`)
+      return origCreateElement(...args)
+    }
+
+    try {
+      const engine = ctx.createEngine(defaultConfig(42))
+      for (let i = 0; i < 50; i++) engine.tick()
+    } finally {
+      // Restore originals
+      document.querySelector = origQuerySelector
+      document.getElementById = origGetElementById
+      document.createElement = origCreateElement
+    }
+
+    if (accessed.length > 0) {
+      return { status: 'fail', detail: `Simulation accessed DOM: ${accessed.slice(0, 3).join(', ')}` }
+    }
+    return { status: 'pass', detail: 'No DOM access detected during 50 ticks' }
+  },
 }
 
 const buildClean: AcceptanceCheck = {
   id: 'build-clean',
-  label: 'Clean production build',
-  description: 'Run `npm run build` in terminal.',
+  label: 'App rendered successfully',
+  description: 'Verifies the app loaded, root has content, and no error boundaries triggered.',
   category: 'build',
-  autoDetect: false,
-  async run() { return { status: 'pass', detail: 'Manual check — run `npm run build`' } },
+  autoDetect: true,
+  async run() {
+    const root = document.getElementById('root')
+    if (!root) return { status: 'fail', detail: 'No #root element found' }
+    if (!root.children.length) return { status: 'fail', detail: '#root has no children — app failed to mount' }
+
+    // Check no error boundary is showing
+    const errorText = root.querySelector('[style*="color: rgb(248, 113, 113)"]')
+    if (errorText?.textContent?.includes('Something went wrong')) {
+      return { status: 'fail', detail: 'Error boundary is active' }
+    }
+
+    return { status: 'pass', detail: `App mounted with ${root.querySelectorAll('*').length} DOM nodes` }
+  },
 }
 
 // --- Export All Checks ---

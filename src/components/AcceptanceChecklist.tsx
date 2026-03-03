@@ -226,7 +226,7 @@ export function AcceptanceChecklist({ onClose }: { onClose: () => void }) {
         textAlign: 'center',
         flexShrink: 0,
       }}>
-        Total: {passCount}/{autoChecks.length} auto-checks passed | {ALL_CHECKS.length - autoChecks.length} manual
+        {passCount}/{autoChecks.length} checks passed
       </div>
     </div>
   )
