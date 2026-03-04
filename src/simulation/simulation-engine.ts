@@ -268,6 +268,7 @@ export class SimulationEngine {
       if (villager.path.length > 0) continue
 
       const decision = this.state.config.aiSystem.decide(villager, worldView, this.aiRng)
+      villager.lastDecision = { reason: decision.reason, scores: decision.scores }
 
       const actionDef = getActionDefinition(decision.action)
       if (actionDef && actionDef.canPerform(villager, this.state.world, this.state.stockpile, this.state.campfirePosition, ctx)) {

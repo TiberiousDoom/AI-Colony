@@ -3,6 +3,7 @@
  */
 
 import { useSimulationStore } from '../store/simulation-store.ts'
+import { ViewToggle } from './ViewToggle.tsx'
 
 const SPEED_OPTIONS = [1, 2, 4, 8]
 
@@ -183,6 +184,9 @@ export function TopBar({ onToggleChecklist }: { onToggleChecklist?: () => void }
           Simulation Over
         </div>
       )}
+
+      {/* View toggle */}
+      <ViewToggle />
 
       {/* Acceptance checklist toggle */}
       {onToggleChecklist && (

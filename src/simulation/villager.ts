@@ -68,6 +68,8 @@ export interface Villager {
   alive: boolean
   /** Carried resource (for hauling) */
   carrying: { type: 'food' | 'wood' | 'stone'; amount: number } | null
+  /** Last AI decision (for inspector display) */
+  lastDecision?: { reason: string; scores?: Array<{ action: string; score: number; reason: string }> }
 }
 
 // --- Stockpile ---

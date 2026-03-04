@@ -19,6 +19,8 @@ interface SimulationStore {
   speed: number
   /** World seed */
   seed: number
+  /** Current view mode */
+  viewMode: 'metrics' | 'simulation'
 
   // Actions
   init: (seed: number) => void
@@ -27,6 +29,7 @@ interface SimulationStore {
   reset: () => void
   setSpeed: (speed: number) => void
   setSeed: (seed: number) => void
+  setViewMode: (mode: 'metrics' | 'simulation') => void
 }
 
 let engine: CompetitionEngine | null = null
@@ -99,6 +102,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
     isRunning: false,
     speed: 1,
     seed: Math.floor(Math.random() * 1000000),
+    viewMode: 'metrics' as const,
 
     init(seed: number) {
       const config: CompetitionConfig = {
@@ -158,6 +162,10 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
 
     setSeed(seed: number) {
       set({ seed })
+    },
+
+    setViewMode(mode: 'metrics' | 'simulation') {
+      set({ viewMode: mode })
     },
   }
 })
