@@ -63,7 +63,7 @@ describe('Animation', () => {
   })
 
   it('all animation frame names exist in sprite inventory', () => {
-    const spriteSet = new Set(SPRITE_NAMES)
+    const spriteSet = new Set<string>(SPRITE_NAMES)
     for (const [, anim] of Object.entries(ANIMATIONS)) {
       for (const frameName of anim.frames) {
         expect(spriteSet.has(frameName), `Missing sprite: ${frameName}`).toBe(true)
