@@ -61,9 +61,9 @@ export class EventScheduler {
 
   /** Apply per-tick effects of active events */
   processActiveEvents(
-    events: RandomEvent[],
-    villagers: { alive: boolean; position: Position; needs: Map<string, { current: number }> }[],
-    campfire: Position,
+    _events: RandomEvent[],
+    _villagers: { alive: boolean; position: Position; needs: Map<string, { current: number }> }[],
+    _campfire: Position,
   ): void {
     // Processing is done in the engine tick loop
   }

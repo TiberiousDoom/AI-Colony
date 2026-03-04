@@ -3,7 +3,7 @@
  */
 
 import {
-  LineChart, Line, AreaChart, Area, BarChart, Bar,
+  LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
 import { useSimulationStore } from '../store/simulation-store.ts'

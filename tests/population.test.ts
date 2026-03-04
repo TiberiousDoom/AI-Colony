@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { SimulationEngine, TICKS_PER_DAY, DAYS_PER_SEASON } from '../src/simulation/simulation-engine.ts'
+import { SimulationEngine, TICKS_PER_DAY } from '../src/simulation/simulation-engine.ts'
 import { UtilityAI } from '../src/simulation/ai/utility-ai.ts'
 import { createStructure, getShelterCapacity } from '../src/simulation/structures.ts'
 
@@ -84,7 +84,6 @@ describe('Population Growth', () => {
     s.stockpile.food = 200
 
     advanceDays(engine, 20)
-    const birthEvents = engine.getState().events.filter(e => e.type === 'birth')
     // May or may not have birth depending on seed
     // Just verify no errors running 20 days with growth conditions
     expect(engine.getState().villagers.length).toBeGreaterThanOrEqual(1)

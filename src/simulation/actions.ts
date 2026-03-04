@@ -240,11 +240,11 @@ export const MINE_STONE_ACTION = makeAction(
 
 export const BUILD_SHELTER_ACTION = makeAction(
   'build_shelter', 6, 2,
-  (v, _w, stockpile, campfire, ctx) => {
+  (v, _w, stockpile, campfire, _ctx) => {
     if (stockpile.wood < 20) return false
     return isAtOrAdjacent(v.position.x, v.position.y, campfire.x, campfire.y)
   },
-  (v, _w, stockpile, _rng, campfire, ctx) => {
+  (v, _w, stockpile, _rng, _campfire, _ctx) => {
     if (stockpile.wood < 20) return
     stockpile.wood -= 20
     // Engine picks up the _builtStructure marker
@@ -257,11 +257,11 @@ export const BUILD_SHELTER_ACTION = makeAction(
 
 export const BUILD_STORAGE_ACTION = makeAction(
   'build_storage', 6, 2,
-  (v, _w, stockpile, campfire, ctx) => {
+  (v, _w, stockpile, campfire, _ctx) => {
     if (stockpile.wood < 15 || stockpile.stone < 10) return false
     return isAtOrAdjacent(v.position.x, v.position.y, campfire.x, campfire.y)
   },
-  (v, _w, stockpile, _rng, campfire, ctx) => {
+  (v, _w, stockpile, _rng, _campfire, _ctx) => {
     if (stockpile.wood < 15 || stockpile.stone < 10) return
     stockpile.wood -= 15
     stockpile.stone -= 10

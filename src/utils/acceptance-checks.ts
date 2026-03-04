@@ -2,7 +2,8 @@
  * Phase 1 Acceptance Criteria — auto-detectable checks.
  */
 
-import { SimulationEngine, type SimulationConfig, type SimulationState } from '../simulation/simulation-engine.ts'
+import { SimulationEngine, type SimulationConfig } from '../simulation/simulation-engine.ts'
+import type { CompetitionState } from '../simulation/competition-engine.ts'
 import { UtilityAI } from '../simulation/ai/utility-ai.ts'
 
 export type CheckStatus = 'pass' | 'fail' | 'running' | 'skipped' | 'pending'
@@ -18,7 +19,7 @@ export interface AcceptanceCheck {
 
 export interface CheckContext {
   storeState: {
-    simState: SimulationState | null
+    simState: CompetitionState | null
     isRunning: boolean
     speed: number
     seed: number

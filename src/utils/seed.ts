@@ -67,14 +67,8 @@ export function createRNG(seed: number): SeededRNG {
 
 /** Restore an RNG from a previously captured internal state */
 export function createRNGFromState(savedState: number): SeededRNG {
-  const rng = createRNG(0)
-  // Override internal state by using the fact that createRNG sets state = seed | 0
-  // We need to set the internal state directly, so we create a new RNG and
-  // advance it to match. Instead, we use a workaround: build a new one with the
-  // saved state as seed (since Mulberry32's state IS the seed before first call).
-  // But that's not correct — getState() returns state AFTER initialization calls.
-  // The cleanest approach: recreate with a known seed and then set state.
-  // Since we can't access `state` from outside, we'll create a fresh RNG function.
+  // Mulberry32's state IS the seed before first call.
+  // Recreate by using the saved state directly.
   return createRNGFromStateInternal(savedState)
 }
 
