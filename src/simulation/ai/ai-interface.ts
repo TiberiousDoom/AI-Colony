@@ -21,6 +21,8 @@ export interface AIDecision {
   targetPosition?: Position
   /** Reasoning string for inspector/debug display */
   reason: string
+  /** Optional: scoring breakdown for inspector display (Utility AI populates this, BT AI omits it) */
+  scores?: Array<{ action: string; score: number; reason: string }>
 }
 
 /** Read-only snapshot of world state visible to the AI */

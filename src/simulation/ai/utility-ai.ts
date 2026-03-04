@@ -276,8 +276,11 @@ export class UtilityAI implements IAISystem {
     let bestAction: ActionDefinition = actions[actions.length - 1] // idle fallback
     let bestReason = 'idle: fallback'
 
+    const allScores: Array<{ action: string; score: number; reason: string }> = []
+
     for (const action of actions) {
       const { score, reason } = scoreAction(action, villager, worldView, rng)
+      allScores.push({ action: action.type, score, reason })
 
       if (score > bestScore) {
         bestScore = score
@@ -286,12 +289,16 @@ export class UtilityAI implements IAISystem {
       }
     }
 
+    // Sort scores descending for inspector display
+    allScores.sort((a, b) => b.score - a.score)
+
     const targetPosition = findTargetForAction(bestAction.type, villager, worldView)
 
     return {
       action: bestAction.type,
       targetPosition,
       reason: bestReason,
+      scores: allScores,
     }
   }
 }

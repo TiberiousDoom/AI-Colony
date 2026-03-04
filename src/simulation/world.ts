@@ -50,6 +50,9 @@ export class World {
   /** Blighted tiles: "x,y" → ticks remaining until recovery */
   blightTiles: Map<string, number> = new Map()
 
+  /** Tiles that changed since last render (for efficient rendering) */
+  readonly dirtyTiles: Set<string> = new Set()
+
   constructor(config: WorldConfig) {
     this.width = config.width
     this.height = config.height
@@ -122,6 +125,7 @@ export class World {
         const tile = this.tiles[y]?.[x]
         if (tile && tile.type === TileType.Forest) {
           tile.resourceAmount = tile.maxResource
+          this.dirtyTiles.add(key)
         }
       } else {
         this.blightTiles.set(key, remaining - 1)
@@ -139,10 +143,14 @@ export class World {
         if (tile.regenRate > 0 && tile.resourceAmount < tile.maxResource) {
           // Don't regen blighted tiles
           if (this.blightTiles.has(`${x},${y}`)) continue
+          const before = tile.resourceAmount
           tile.resourceAmount = Math.min(
             tile.maxResource,
             tile.resourceAmount + tile.regenRate * regenMult,
           )
+          if (tile.resourceAmount !== before) {
+            this.dirtyTiles.add(`${x},${y}`)
+          }
         }
       }
     }
@@ -161,6 +169,7 @@ export class World {
         if (tile.type === TileType.Forest && tile.resourceAmount > 0) {
           tile.resourceAmount = 0
           this.blightTiles.set(`${x},${y}`, durationTicks)
+          this.dirtyTiles.add(`${x},${y}`)
         }
       }
     }

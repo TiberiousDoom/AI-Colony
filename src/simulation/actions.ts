@@ -119,6 +119,7 @@ export const FORAGE_ACTION = makeAction(
     const amount = applyForageYieldModifier(baseAmount, ctx.season)
     const harvested = Math.min(amount, worldTile.resourceAmount)
     worldTile.resourceAmount -= harvested
+    world.dirtyTiles.add(`${tile.x},${tile.y}`)
     v.carrying = { type: 'food', amount: harvested }
   },
 )
@@ -183,6 +184,7 @@ export const CHOP_WOOD_ACTION = makeAction(
     const amount = rng.nextInt(8, 12)
     const harvested = Math.min(amount, worldTile.resourceAmount)
     worldTile.resourceAmount -= harvested
+    world.dirtyTiles.add(`${tile.x},${tile.y}`)
     v.carrying = { type: 'wood', amount: harvested }
   },
 )
@@ -234,6 +236,7 @@ export const MINE_STONE_ACTION = makeAction(
     const amount = rng.nextInt(6, 10)
     const harvested = Math.min(amount, worldTile.resourceAmount)
     worldTile.resourceAmount -= harvested
+    world.dirtyTiles.add(`${tile.x},${tile.y}`)
     v.carrying = { type: 'stone', amount: harvested }
   },
 )

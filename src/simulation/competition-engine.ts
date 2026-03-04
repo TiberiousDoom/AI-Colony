@@ -365,6 +365,7 @@ export class CompetitionEngine {
       if (villager.path.length > 0) continue
 
       const decision = village.aiSystem.decide(villager, worldView, rngs.ai)
+      villager.lastDecision = { reason: decision.reason, scores: decision.scores }
       const actionDef = getActionDefinition(decision.action)
 
       if (actionDef && actionDef.canPerform(villager, village.world, village.stockpile, village.campfirePosition, ctx)) {
