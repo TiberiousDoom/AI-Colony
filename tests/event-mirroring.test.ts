@@ -29,7 +29,6 @@ describe('Event Mirroring', () => {
     const state = engine.getState()
     // Active events are global, shared by both villages
     // Just check no crash and events exist in global log
-    const randomEvents = state.globalEvents.filter(e => e.type === 'random_event')
     // May or may not have events depending on seed
     expect(state.tick).toBeGreaterThan(0)
   })

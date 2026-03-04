@@ -98,7 +98,7 @@ function buildVillagerTree(villager: Readonly<Villager>, wv: AIWorldView): BTNod
   const emergency = new Selector([
     // Health crisis → eat or rest
     new Sequence([
-      new Condition((ctx) => {
+      new Condition((_ctx) => {
         const health = getNeed(villager as Villager, NeedType.Health)
         return health.current < 20
       }),

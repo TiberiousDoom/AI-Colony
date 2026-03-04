@@ -28,7 +28,7 @@ import { getStockpileCap, getShelterCapacity, createStructure } from './structur
 import { EventScheduler, type RandomEvent, resolveEventPosition } from './events.ts'
 import {
   TICKS_PER_DAY, DAY_TICKS, DAYS_PER_SEASON,
-  type SimulationHistory, type DailySnapshot, type SimulationEvent, type SimulationEventType,
+  type SimulationHistory, type SimulationEvent, type SimulationEventType,
 } from './simulation-engine.ts'
 
 const SEASONS: Season[] = ['spring', 'summer', 'autumn', 'winter']
@@ -595,10 +595,6 @@ export class CompetitionEngine {
   }
 
   private inferCauseOfDeath(village: VillageState): string {
-    const recentDeaths = village.events
-      .filter(e => e.type === 'death')
-      .slice(-5)
-
     if (this.state.season === 'winter') {
       return `perished during winter, day ${this.state.dayCount + 1}`
     }

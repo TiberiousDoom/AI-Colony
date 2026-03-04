@@ -78,7 +78,6 @@ describe('Seasonal Cycle', () => {
     // Deplete a forest tile
     const forest = world.findTilesInRadius(32, 32, 15, t => t.type === 'forest')[0]
     if (forest) {
-      const orig = forest.resourceAmount
       forest.resourceAmount = 50
       world.tickRegeneration('spring')
       // Spring: 2x regen

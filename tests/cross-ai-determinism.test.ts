@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import { CompetitionEngine, type CompetitionConfig } from '../src/simulation/competition-engine.ts'
 import { UtilityAI } from '../src/simulation/ai/utility-ai.ts'
 import { BehaviorTreeAI } from '../src/simulation/ai/behavior-tree-ai.ts'
-import { TICKS_PER_DAY } from '../src/simulation/simulation-engine.ts'
 
 describe('Cross-AI Determinism', () => {
   it('same seed produces identical worlds for both villages at tick 0', () => {
