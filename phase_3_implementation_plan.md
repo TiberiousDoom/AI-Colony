@@ -1,8 +1,10 @@
 # Phase 3: Visual Layer — Implementation Plan
 
-**Version:** 1.0
+**Version:** 1.1
 **Date:** March 4, 2026
 **Goal:** Add a pixel art simulation view as a toggle alongside the metrics dashboard. PixiJS rendering with terrain, villagers, structures, day/night, seasons, inspector, and minimap.
+
+**v1.1 changes:** (1) Decoupled render loop from React — standalone rAF reads store.getState() directly; (2) Single WebGL context with dual viewports instead of two PixiJS Applications; (3) Runtime procedural sprites via Graphics→RenderTexture, dropping free-tex-packer-cli and canvas dependencies; (4) Moved canvas + view toggle to Step 3 for immediate visual feedback; (5) Inlined AI scores in AIDecision instead of stateful getLastScores(); (6) Clarified prevPosition tracking for villager movement lerping.
 
 ---
 
@@ -13,9 +15,9 @@ Phase 3 adds the visual simulation view described in the master plan (Section 2:
 Key deliverables:
 
 1. **PixiJS rendering pipeline** — Tile grid, villager sprites, structures, resources rendered via PixiJS
-2. **Sprite asset pipeline** — `free-tex-packer-cli` workflow to pack 16×16 PNGs into sprite sheets
+2. **Runtime procedural sprites** — 16×16 placeholder textures generated at runtime via PixiJS Graphics (no build step, no binary assets)
 3. **Camera controls** — Independent pan/zoom per village canvas
-4. **Side-by-side dual canvas** — Two village worlds rendered simultaneously
+4. **Side-by-side dual viewport** — Two village worlds rendered simultaneously in a single shared canvas
 5. **Day/night overlay** — Darken + blue tint at night, brighten during day
 6. **Seasonal palette** — Green → gold → brown → white palette shifts per season
 7. **Villager inspector** — Click a villager to see needs, action, and AI decision rationale
@@ -53,24 +55,30 @@ The plan is organized into 12 implementation steps across 5 blocks.
 - `Tile.type`, `Tile.resourceAmount` for terrain and resource visualization
 - `package.json` does NOT yet include PixiJS (listed in master plan tech stack but not installed in Phase 1)
 
+**Key rendering architecture decisions (v1.1):**
+- **Single WebGL context** — one PixiJS `Application` with two `Container` subtree viewports, not two apps
+- **Decoupled render loop** — standalone `requestAnimationFrame` reads `store.getState()` directly, not driven by React re-renders
+- **Runtime procedural sprites** — no offline build pipeline, no binary assets in git
+- **Canvas visible from Step 3** — view toggle and tile rendering wired up immediately, subsequent steps add layers incrementally
+
 ---
 
 ## Implementation Blocks
 
-### Block A: Rendering Infrastructure
-Steps 1–2. Install PixiJS, set up the rendering pipeline, create the sprite asset system.
+### Block A: Rendering Infrastructure + First Visual Output
+Steps 1–3. Install PixiJS, generate runtime procedural sprites, render tile grid **with visible canvas and view toggle** (first visual output at end of Step 3).
 
-### Block B: World & Entity Rendering
-Steps 3–5. Tile map rendering, villager sprites with animation, structure and resource rendering.
+### Block B: Entity Rendering
+Steps 4–5. Villager sprites with animation, structure and resource rendering (each step immediately visible on the already-working canvas).
 
 ### Block C: Visual Effects
 Steps 6–7. Day/night overlay and seasonal palette changes.
 
-### Block D: Dual Canvas & Interaction
-Steps 8–10. Side-by-side village canvases, villager inspector panel, minimap.
+### Block D: Dual Viewport & Interaction
+Steps 8–10. Side-by-side dual village viewports (single canvas), villager inspector panel, minimap.
 
-### Block E: Integration & Testing
-Steps 11–12. View toggle, acceptance criteria, and tests.
+### Block E: Polish & Testing
+Steps 11–12. View toggle polish, acceptance criteria, and tests.
 
 ---
 
@@ -80,17 +88,17 @@ Steps 11–12. View toggle, acceptance criteria, and tests.
 
 ### Design
 
-The rendering layer is a pure observer of simulation state. It reads `CompetitionState` from the Zustand store and draws it. The rendering lifecycle is:
+The rendering layer is a pure observer of simulation state. It reads `CompetitionState` from the Zustand store and draws it. The rendering lifecycle is **decoupled from React** to avoid unnecessary re-render overhead:
 
-1. Store updates `competitionState` (via game loop)
-2. React component detects state change
-3. React passes state to PixiJS renderer
-4. PixiJS updates sprites/positions/tints
+1. Store updates `competitionState` (via simulation game loop)
+2. A **standalone `requestAnimationFrame` render loop** (separate from the simulation tick loop) calls `store.getState()` directly each frame
+3. The render loop passes the latest state to PixiJS renderers and calls `app.render()`
+4. PixiJS updates sprites/positions/tints at display refresh rate (~60fps)
 
-PixiJS Application instances are managed as refs inside React components. This avoids re-creating the WebGL context on re-renders. The React component handles:
-- Creating/destroying the PixiJS Application
-- Passing state updates to the renderer
-- Handling DOM events (click, wheel, drag) and forwarding them to the camera/inspector
+This decoupling is critical for performance. The simulation ticks at 1–8 ticks/sec, but the renderer runs at display refresh rate for smooth interpolation. Funneling state through React (which would re-render the component tree on every tick) is wasteful — PixiJS manages its own DOM via `<canvas>`, so React has nothing useful to reconcile. The React component only handles:
+- **Mounting/unmounting** the PixiJS Application (via `useEffect` cleanup)
+- **Starting/stopping** the render loop
+- **Forwarding DOM events** (click, wheel, drag) to the camera/inspector
 
 ### Dependencies
 
@@ -208,13 +216,15 @@ export class SpriteManager {
 
 ---
 
-## Step 2: Sprite Asset Pipeline
+## Step 2: Runtime Procedural Sprites
 
-**Goal:** Set up `free-tex-packer-cli` and create the initial set of 16×16 placeholder sprites.
+**Goal:** Generate all placeholder sprites at runtime using PixiJS `Graphics` → `RenderTexture`, eliminating the need for an offline sprite packing pipeline.
 
 ### Design
 
-The master plan specifies using `free-tex-packer-cli` as a dev dependency. Individual 16×16 PNG source files are packed into a sprite sheet with a JSON atlas. PixiJS loads the atlas via `Assets.load()`.
+Instead of maintaining a `free-tex-packer-cli` + Node.js `canvas` build pipeline (which adds two heavy native dependencies and a manual "pack sprites" step), all placeholder sprites are generated **at runtime** during `SpriteManager` initialization using PixiJS's own `Graphics` API rendered to `RenderTexture`. This produces GPU-resident textures directly — no file I/O, no build step, no binary PNG assets in git.
+
+When real pixel art is ready in a later phase, the `SpriteManager` can be extended to load a sprite sheet atlas via `Assets.load()`, falling back to the procedural textures if the atlas isn't available. This keeps the project functional at every stage.
 
 **Sprite inventory for Phase 3:**
 
@@ -230,61 +240,51 @@ The master plan specifies using `free-tex-packer-cli` as a dev dependency. Indiv
 | UI | selection_ring, minimap_dot | 2 |
 | **Total** | | **29** |
 
-A single 256×256 sprite sheet accommodates all 29 frames (256÷16 = 16 frames per row, 16×16 = 256 possible frames).
-
-**Placeholder sprite style:** Simple, recognizable shapes using flat colors. Each sprite is a 16×16 PNG with transparency. These are functional placeholders — real pixel art can replace them later by dropping new PNGs in the source folder and re-running the packer.
-
-### Design decisions
-
-**Committed packed output:** Per the master plan: "The packed output (`src/assets/sprites/packed/`) should be committed to git rather than treated as a generated artifact — this way the project works immediately after cloning without requiring the packer to be run first."
-
-**Programmatic sprite generation:** Since we don't have an artist, we'll create a small Node.js script (`scripts/generate-placeholders.ts`) that generates the 16×16 PNG source files programmatically using basic Canvas API operations. This script is a dev tool, not part of the runtime. It generates recognizable placeholder art:
+**Procedural sprite style:** Simple, recognizable shapes using flat colors. Each texture is 16×16. These are functional placeholders — real pixel art replaces them by adding atlas loading to `SpriteManager`:
 - Terrain: flat fills with minimal detail (forest = dark green with light center "tree crown", stone = gray with dark cracks, water = blue with lighter wave lines)
 - Villagers: 8×8 body centered in the 16×16 frame, head above, legs below. Walk frames shift legs. Color: warm tan/brown
 - Structures: triangular roof for shelter, box shape for storage
 - Resources: small piles with appropriate coloring
 
+### Design decisions
+
+**No offline build step:** The master plan mentions `free-tex-packer-cli`, but for Phase 3's 29 simple placeholder sprites, a runtime approach is superior:
+- **Zero native dependencies** — `free-tex-packer-cli` and `canvas` (node-canvas) require native compilation and can break across platforms. Removing them simplifies CI and onboarding.
+- **Zero binary assets in git** — no committed PNGs or atlas JSON cluttering the repo
+- **Instant iteration** — change a color constant and reload, no manual re-pack step
+- **Works everywhere** — no Node.js canvas polyfill needed, runs on any browser with WebGL
+
+**Future atlas upgrade path:** When real pixel art arrives, add `Assets.load('atlas.json')` to `SpriteManager` and use atlas textures when available, falling back to procedural when not. The rest of the rendering code doesn't change (it always calls `spriteManager.getTexture(name)`).
+
 ### New files
 
-**`scripts/generate-placeholders.ts`** (new file)
-- Uses Node.js `canvas` package (dev dependency) to generate 16×16 PNGs
-- Outputs to `src/assets/sprites/source/`
-- Run manually: `npx tsx scripts/generate-placeholders.ts`
-
-**`src/assets/sprites/source/`** — directory of individual 16×16 PNGs (generated, committed)
-
-**`src/assets/sprites/packed/`** — sprite sheet + JSON atlas (generated, committed)
+**`src/rendering/sprite-generator.ts`** (new file)
+- Contains all procedural sprite drawing logic using PixiJS `Graphics`
+- Exports a `generateAllTextures(app: Application): Map<string, Texture>` function
+- Called once during `SpriteManager` initialization
+- Each sprite is drawn into a 16×16 `RenderTexture`
 
 ### Dependencies
 
-```bash
-npm install --save-dev free-tex-packer-cli canvas
-```
-
-### Package.json script
-
-```json
-{
-  "pack-sprites": "free-tex-packer-cli --project src/assets/sprites/source/ --output src/assets/sprites/packed/"
-}
-```
+No new dependencies. PixiJS (installed in Step 1) provides `Graphics`, `RenderTexture`, and `Application.renderer.generateTexture()`.
 
 ### Tests to write
 
 **`tests/sprite-manager.test.ts`** (new file)
-- SpriteManager provides fallback textures when atlas not loaded
+- SpriteManager provides textures for all 29 sprite names
 - Texture names follow the naming convention
 - All expected frame names are defined in the sprite inventory constant
+- Fallback returns a valid texture for unknown names
 
 ---
 
-## Step 3: Tile Map Renderer
+## Step 3: Tile Map Renderer + Visible Canvas
 
-**Goal:** Render the 64×64 tile grid for a single village with camera pan/zoom.
+**Goal:** Render the 64×64 tile grid for a single village with camera pan/zoom **and wire up the SimulationView so tiles are visible on screen immediately**. This step produces the first visual output — the moment the developer can see something rendering.
 
 ### Design
 
-The tile map is the base rendering layer. Each tile is a 16×16 sprite from the sprite sheet (or a fallback colored rectangle). Tiles are created once when the world is first rendered and updated only when tile state changes (resource depletion, blight).
+The tile map is the base rendering layer. Each tile is a 16×16 sprite from the procedural textures (or a fallback colored rectangle). Tiles are created once when the world is first rendered and updated only when tile state changes (resource depletion, blight).
 
 **Rendering approach:**
 - Create a `Container` holding all tile sprites
@@ -294,6 +294,8 @@ The tile map is the base rendering layer. Each tile is a 16×16 sprite from the 
 - Resource depletion is shown via alpha: `alpha = 0.4 + 0.6 * (resourceAmount / maxResource)` for harvestable tiles
 
 **Campfire rendering:** The campfire position gets a special sprite (warm orange glow effect using a tinted sprite or simple overlay).
+
+**Early canvas wiring:** This step also creates the minimal `SimulationView.tsx` and view toggle, so the tile grid is visible immediately. The SimulationView is skeletal at this point — just the single PixiJS Application, one village viewport with a TileRenderer, and basic pan/zoom. Subsequent steps add layers (villagers, structures, lighting, minimap, inspector) incrementally to this already-visible canvas. This avoids the "build 7 invisible layers, then wire them all up at Step 8" antipattern — every step after this one produces immediately visible results.
 
 ### New files
 
@@ -329,6 +331,29 @@ export class TileRenderer {
 }
 ```
 
+**`src/views/SimulationView.tsx`** (new file — skeletal version)
+- Creates the single PixiJS `Application` (shared canvas)
+- Starts the standalone rAF render loop (reads `store.getState()` directly)
+- Creates one `VillageRenderer` with only the `TileRenderer` wired up initially
+- Basic pan/zoom via mouse events
+- Expanded in Steps 4–10 as new renderer layers are added
+
+**`src/components/ViewToggle.tsx`** (new file)
+- Simple toggle button to switch between metrics and simulation view
+- Moved here from Step 11 so the simulation view is reachable immediately
+
+### Files to modify
+
+**`src/App.tsx`**
+- Conditionally render `MetricsDashboard` or `SimulationView` based on `viewMode`
+
+**`src/store/simulation-store.ts`**
+- Add `viewMode: 'metrics' | 'simulation'` and `setViewMode(mode)` action
+- Add `tickProgress: number` for render interpolation
+
+**`src/components/TopBar.tsx`**
+- Add view toggle button
+
 ### Tests to write
 
 **`tests/tile-renderer.test.ts`** (new file)
@@ -359,6 +384,8 @@ Each alive villager gets an `AnimatedSprite` (or a `Sprite` with manual frame cy
 | `build_shelter`, `build_storage` | work_0..3 (loop) | Construction |
 
 **Movement interpolation:** Villagers move tile-by-tile per tick. Between ticks, the renderer interpolates position using `lerp(prevPosition, currentPosition, tickProgress)` where `tickProgress` is derived from the elapsed time since the last tick. This creates smooth movement instead of teleporting tile-to-tile.
+
+**prevPosition tracking:** The `VillagerRenderer` maintains a `Map<string, { prevX: number; prevY: number }>` that snapshots each villager's position **at the start of each simulation tick**. On each render frame, it lerps between `(prevX, prevY)` and the villager's current `(position.x, position.y)`. The snapshot is taken when the renderer detects that `store.getState().competitionState.tick` has advanced since the last render frame. This keeps the interpolation data in the rendering layer (not the simulation) and avoids modifying `Villager` or `VillageState` types.
 
 **Villager coloring:** Each village has a color (blue #3b82f6 for Utility AI, orange #f97316 for BT). Villager sprites are tinted with their village color so you can tell which village they belong to on the shared canvas (and later in Phase 6 shared world mode).
 
@@ -621,27 +648,28 @@ export const VILLAGE_COLORS = {
 
 ---
 
-## Step 8: Village Canvas Component (Side-by-Side)
+## Step 8: Dual Village Viewports (Side-by-Side)
 
-**Goal:** Create the React component that hosts a PixiJS canvas for one village, then compose two side-by-side.
+**Goal:** Expand the `SimulationView` (created in Step 3 with one village) to render **both** villages side-by-side within the single shared canvas.
 
 ### Design
 
-Each village gets its own `<VillageCanvas>` React component containing:
-- A PixiJS `Application` instance (created via ref)
-- Its own `Camera` instance for independent pan/zoom
-- A `TileRenderer`, `VillagerRenderer`, `StructureRenderer`, `StockpileRenderer`, and `LightingOverlay`
-- Mouse/touch event handlers for:
-  - **Pan:** Middle-click drag or touch drag
-  - **Zoom:** Mouse wheel or pinch gesture
-  - **Click:** Left-click to select villager (opens inspector)
+Step 3 created the `SimulationView` with a single PixiJS `Application` and one `VillageRenderer` for testing. This step adds the second `VillageRenderer` and wires up the side-by-side layout within the **same single `<canvas>`**. Both village viewports are `Container` subtrees on the shared `Application.stage`, positioned at x=0 and x=width/2 respectively with `mask` or scissor clip to prevent overflow.
 
-The `<SimulationView>` component composes two `<VillageCanvas>` components side by side, each rendering one `VillageState`. It also holds the inspector panel and minimaps.
+Each village viewport has:
+- Its own `Camera` instance for independent pan/zoom
+- All sub-renderers from Steps 3–7 (`TileRenderer`, `VillagerRenderer`, `StructureRenderer`, `StockpileRenderer`, `LightingOverlay`) under its own root `Container`
+- Hit-testing scoped to its half of the canvas
+
+Mouse/touch event handlers route to the correct viewport based on pointer x-position:
+- **Pan:** Middle-click drag or touch drag
+- **Zoom:** Mouse wheel or pinch gesture
+- **Click:** Left-click to select villager (opens inspector)
 
 **Layout:**
 ```
 +-----------------------------+-----------------------------+
-|       Village A Canvas      |       Village B Canvas      |
+|    Village A Viewport       |    Village B Viewport       |
 |    (pan/zoom independent)   |    (pan/zoom independent)   |
 |                             |                             |
 +----------+------------------+----------+------------------+
@@ -651,8 +679,9 @@ The `<SimulationView>` component composes two `<VillageCanvas>` components side 
 |                    Inspector Panel                        |
 +-----------------------------------------------------------+
 ```
+All rendered in the **single `<canvas>`** via PixiJS container transforms.
 
-**Responsive sizing:** Each canvas takes 50% of available width. Height is the remaining space below the top bar. The inspector panel overlays from the bottom when a villager is selected.
+**Responsive sizing:** The single canvas fills the available space. Height is the remaining space below the top bar. The inspector panel is a React overlay on top of the canvas.
 
 ### New files
 
@@ -674,7 +703,7 @@ import { LightingOverlay } from './lighting.ts'
 import type { SpriteManager } from './sprite-manager.ts'
 
 export class VillageRenderer {
-  readonly app: Application
+  readonly rootContainer: Container  // Added to the shared Application's stage
   readonly camera: Camera
   private tileRenderer: TileRenderer
   private villagerRenderer: VillagerRenderer
@@ -686,51 +715,29 @@ export class VillageRenderer {
 
   constructor(spriteManager: SpriteManager, villageTint: number, tileSize?: number)
 
-  /** Initialize the PixiJS application (async — WebGL context creation) */
-  async init(canvas: HTMLCanvasElement): Promise<void>
+  /** Initialize renderers within the shared app (no WebGL context creation — that's done once by SimulationView) */
+  init(app: Application, viewportX: number, viewportWidth: number, viewportHeight: number): void
 
   /** Full render update from village state */
   render(village: VillageState, timeOfDay: TimeOfDay, season: Season, tickProgress: number, deltaMs: number): void
 
-  /** Handle resize */
-  resize(width: number, height: number): void
+  /** Handle resize (reposition viewport within shared canvas) */
+  resize(viewportX: number, viewportWidth: number, viewportHeight: number): void
 
-  /** Get villager ID at screen coordinates */
-  hitTest(screenX: number, screenY: number): string | null
+  /** Get villager ID at screen coordinates (relative to this viewport) */
+  hitTest(localX: number, localY: number): string | null
 
-  /** Destroy all resources */
+  /** Destroy all sub-renderers (does NOT destroy the shared Application) */
   destroy(): void
 }
 ```
 
-**`src/components/VillageCanvas.tsx`** (new file)
-
-React wrapper that manages a `VillageRenderer` lifecycle.
-
-```typescript
-interface VillageCanvasProps {
-  village: VillageState
-  timeOfDay: TimeOfDay
-  season: Season
-  villageTint: number
-  spriteManager: SpriteManager
-  onVillagerClick?: (villagerId: string) => void
-}
-```
-
-**`src/views/SimulationView.tsx`** (new file)
-
-Top-level simulation view composing two `VillageCanvas` components, minimaps, and the inspector panel.
-
-```typescript
-export function SimulationView(): JSX.Element
-```
-
 ### Files to modify
 
-**`src/store/simulation-store.ts`**
-- Add `tickProgress: number` to store (0–1 fraction within current tick, for interpolation)
-- Updated during game loop: `tickProgress = accumulator / TICK_INTERVAL_MS`
+**`src/views/SimulationView.tsx`**
+- Add second `VillageRenderer` instance
+- Split canvas into two viewport regions
+- Route pointer events to correct viewport based on x-position
 
 ### Tests to write
 
@@ -773,18 +780,23 @@ The inspector is a React overlay panel that appears at the bottom of the simulat
 
 ### Design decision: AI scoring exposure
 
-To show Utility AI scores in the inspector, we need access to the scoring breakdown — not just the final decision. Rather than modifying `IAISystem.decide()` (which would affect all AI systems), we add an optional `getLastScores()` method to the AI interface:
+To show Utility AI scores in the inspector, we need access to the scoring breakdown — not just the final decision. Rather than adding a stateful `getLastScores()` method to `IAISystem` (which introduces hidden mutable state and makes the AI system harder to reason about — "which villager was last?" becomes a concern), we **inline the scores directly into `AIDecision`**:
 
 ```typescript
-export interface IAISystem {
-  readonly name: string
-  decide(villager, worldView, rng): AIDecision
-  /** Optional: return scoring breakdown from the last decide() call (for inspector display) */
-  getLastScores?(): Array<{ action: string; score: number; reason: string }>
+export interface AIDecision {
+  action: VillagerAction
+  targetPosition?: Position
+  reason: string
+  /** Optional: scoring breakdown for inspector display (Utility AI populates this, BT AI omits it) */
+  scores?: Array<{ action: string; score: number; reason: string }>
 }
 ```
 
-This is optional — only Utility AI implements it. BT AI returns the tree path via the `reason` string.
+This is cleaner because:
+- **No hidden state** — the scores travel with the decision, not cached in the AI system
+- **Thread-safe by construction** — no "which villager's scores are stored?" ambiguity
+- **No interface change to `IAISystem`** — only `AIDecision` gains an optional field
+- **BT AI unaffected** — it simply doesn't populate the `scores` field (uses `reason` for tree path)
 
 ### New files
 
@@ -817,11 +829,10 @@ export function NeedBar({ label, value, max }: NeedBarProps): JSX.Element
 ### Files to modify
 
 **`src/simulation/ai/ai-interface.ts`**
-- Add optional `getLastScores?()` to `IAISystem`
+- Add optional `scores` field to `AIDecision` interface
 
 **`src/simulation/ai/utility-ai.ts`**
-- Store the scoring breakdown from the last `decide()` call
-- Implement `getLastScores()` returning the stored breakdown
+- Populate `scores` field in the returned `AIDecision` with the top-N scored actions and their breakdowns
 
 **`src/views/SimulationView.tsx`**
 - Track selected villager state
@@ -905,49 +916,32 @@ export class Minimap {
 
 ---
 
-## Step 11: View Toggle & Integration
+## Step 11: Final Integration & View Polish
 
-**Goal:** Toggle between metrics dashboard and simulation view via the shared top bar.
+**Goal:** Polish the view toggle (created in Step 3) and ensure seamless switching between metrics dashboard and simulation view.
 
 ### Design
 
-Add a view toggle to the `TopBar` component. The toggle switches the main content area between `MetricsDashboard` and `SimulationView`. Both views share the same top bar (controls, speed, seed, season display).
+The view toggle was introduced in Step 3 (so tiles were visible immediately). This step adds polish:
 
-**Toggle behavior:**
+**Lazy initialization:** The PixiJS `Application` and procedural textures are created on first view switch. A loading indicator ("Loading simulation view...") is shown during initialization (~100ms). Subsequent view switches are instant because the `Application` is retained (not destroyed on switch-away).
+
+**Keyboard shortcut:** `Tab` key toggles between views (when not focused on an input).
+
+**Toggle behavior (already in place from Step 3, polished here):**
 - Default view: Metrics Dashboard (per master plan: "Stealth Mode")
-- Toggle button: icon-style button in the top bar showing current view mode
-- State managed in the simulation store as `viewMode: 'metrics' | 'simulation'`
 - Switching views does NOT pause the simulation — it continues running
-- PixiJS resources are created lazily (only when simulation view is first opened) and retained when switching back to metrics to avoid WebGL context recreation overhead
-
-**Lazy initialization:** The `SpriteManager` loads the sprite atlas on first view switch. A loading indicator ("Loading sprites...") is shown while the atlas loads. Subsequent view switches are instant.
+- PixiJS render loop pauses when in metrics view (saves GPU) and resumes on switch
 
 ### Files to modify
 
-**`src/store/simulation-store.ts`**
-- Add `viewMode: 'metrics' | 'simulation'` to store state
-- Add `setViewMode(mode)` action
-- Add `tickProgress: number` for render interpolation (if not added in Step 8)
+**`src/views/SimulationView.tsx`**
+- Add loading state during PixiJS initialization
+- Pause/resume render loop based on visibility
 
-**`src/App.tsx`**
-- Conditionally render `MetricsDashboard` or `SimulationView` based on `viewMode`
-- Create `SpriteManager` instance at app level (shared between both canvases)
-- Handle sprite loading state
-
-**`src/components/TopBar.tsx`**
-- Add view toggle button (left side, near title)
-- Button label: "Chart" / "Sim" or icon-based toggle
-- Active view highlighted
-
-**`src/components/ViewToggle.tsx`** (new file)
-```typescript
-interface ViewToggleProps {
-  viewMode: 'metrics' | 'simulation'
-  onToggle: (mode: 'metrics' | 'simulation') => void
-}
-
-export function ViewToggle({ viewMode, onToggle }: ViewToggleProps): JSX.Element
-```
+**`src/components/ViewToggle.tsx`**
+- Add keyboard shortcut handling
+- Polish styling (active state indicator)
 
 ### Tests to write
 
@@ -990,7 +984,7 @@ export function ViewToggle({ viewMode, onToggle }: ViewToggleProps): JSX.Element
 - [ ] View toggle switches between metrics and simulation
 - [ ] Simulation continues running across view switches
 - [ ] Both villages render side by side
-- [ ] Sprint sheet loads correctly
+- [ ] Procedural textures generate correctly for all 29 sprite names
 
 ### Phase 1+2 regression
 
@@ -1015,28 +1009,28 @@ export function ViewToggle({ viewMode, onToggle }: ViewToggleProps): JSX.Element
 ```
 Step 1: PixiJS Setup & Rendering Architecture
   ↓
-Step 2: Sprite Asset Pipeline  ←  depends on PixiJS setup
+Step 2: Runtime Procedural Sprites  ←  depends on PixiJS setup
   ↓
-Step 3: Tile Map Renderer  ←  depends on sprites + camera
+Step 3: Tile Map Renderer + Visible Canvas + View Toggle  ←  FIRST VISUAL OUTPUT
+  ↓  (every step below is immediately visible on the working canvas)
+Step 4: Villager Sprites & Animation  ←  adds layer to existing canvas
   ↓
-Step 4: Villager Sprites & Animation  ←  depends on tile renderer (layering)
+Step 5: Structure & Resource Rendering  ←  adds layer to existing canvas
   ↓
-Step 5: Structure & Resource Rendering  ←  depends on tile renderer
+Step 6: Day/Night Overlay  ←  adds overlay layer
   ↓
-Step 6: Day/Night Overlay  ←  depends on tile renderer (overlay on top)
+Step 7: Seasonal Palette  ←  tints existing tile sprites
   ↓
-Step 7: Seasonal Palette  ←  depends on tile renderer (tint system)
+Step 8: Dual Village Viewports  ←  adds second VillageRenderer to shared canvas
+  ├─→ Step 9: Villager Inspector  ←  depends on click handling
+  └─→ Step 10: Minimap  ←  depends on viewport positioning
   ↓
-Step 8: Village Canvas (Side-by-Side)  ←  depends on ALL renderers above
-  ├─→ Step 9: Villager Inspector  ←  depends on village canvas (click handling)
-  └─→ Step 10: Minimap  ←  depends on village canvas (positioning)
-  ↓
-Step 11: View Toggle & Integration  ←  depends on village canvas + inspector + minimap
+Step 11: Final Integration & View Polish  ←  polishes view toggle from Step 3
   ↓
 Step 12: Acceptance & Testing  ←  depends on everything
 ```
 
-Note: Steps 6 (day/night) and 7 (seasons) are independent of each other and can be parallelized. Steps 9 (inspector) and 10 (minimap) are independent and can be parallelized.
+Note: Steps 6 (day/night) and 7 (seasons) are independent of each other and can be parallelized. Steps 9 (inspector) and 10 (minimap) are independent and can be parallelized. The key difference from a naive ordering is that **Step 3 produces visual output** — everything after it is incremental improvement on an already-rendering canvas.
 
 ---
 
@@ -1046,7 +1040,8 @@ Note: Steps 6 (day/night) and 7 (seasons) are independent of each other and can 
 |------|---------|-------------|
 | `src/rendering/types.ts` | Rendering type definitions | ~30 lines |
 | `src/rendering/camera.ts` | Camera pan/zoom/coordinate transforms | ~120 lines |
-| `src/rendering/sprite-manager.ts` | Sprite sheet loading and fallback textures | ~100 lines |
+| `src/rendering/sprite-manager.ts` | Sprite loading with procedural fallback | ~80 lines |
+| `src/rendering/sprite-generator.ts` | Runtime procedural sprite generation via PixiJS Graphics | ~200 lines |
 | `src/rendering/tile-renderer.ts` | Tile grid rendering with resource depletion | ~150 lines |
 | `src/rendering/villager-renderer.ts` | Villager sprite management and interpolation | ~180 lines |
 | `src/rendering/animation.ts` | Animation definitions and frame advancement | ~80 lines |
@@ -1056,16 +1051,12 @@ Note: Steps 6 (day/night) and 7 (seasons) are independent of each other and can 
 | `src/rendering/palette.ts` | Seasonal tint constants and village colors | ~50 lines |
 | `src/rendering/village-renderer.ts` | Orchestrator wiring all sub-renderers | ~200 lines |
 | `src/rendering/minimap.ts` | Minimap overview renderer | ~120 lines |
-| `src/views/SimulationView.tsx` | Top-level simulation view layout | ~150 lines |
-| `src/components/VillageCanvas.tsx` | React wrapper for PixiJS village canvas | ~180 lines |
+| `src/views/SimulationView.tsx` | Top-level simulation view (owns single PixiJS App + render loop) | ~200 lines |
 | `src/components/VillagerInspector.tsx` | Inspector panel for selected villager | ~200 lines |
 | `src/components/NeedBar.tsx` | Horizontal need bar component | ~40 lines |
 | `src/components/ViewToggle.tsx` | Metrics/Simulation view switcher | ~50 lines |
-| `scripts/generate-placeholders.ts` | Placeholder sprite generator script | ~200 lines |
-| `src/assets/sprites/source/*.png` | 29 individual 16×16 PNGs | (binary) |
-| `src/assets/sprites/packed/*` | Sprite sheet + JSON atlas | (binary) |
 | `tests/camera.test.ts` | Camera coordinate/zoom tests | ~80 lines |
-| `tests/sprite-manager.test.ts` | Sprite loading/fallback tests | ~40 lines |
+| `tests/sprite-manager.test.ts` | Sprite generation/fallback tests | ~40 lines |
 | `tests/tile-renderer.test.ts` | Tile grid rendering tests | ~60 lines |
 | `tests/animation.test.ts` | Animation system tests | ~60 lines |
 | `tests/lighting.test.ts` | Day/night overlay tests | ~40 lines |
@@ -1076,17 +1067,25 @@ Note: Steps 6 (day/night) and 7 (seasons) are independent of each other and can 
 | `tests/village-renderer.test.ts` | Village renderer integration tests | ~60 lines |
 | `tests/rendering-integration.test.ts` | Cross-cutting rendering tests | ~50 lines |
 
-**Total new files:** ~31 (including assets)
-**Total estimated new code:** ~2,600 lines (TypeScript/TSX)
+**Total new files:** ~28 (no binary assets — all sprites generated at runtime)
+**Total estimated new code:** ~2,500 lines (TypeScript/TSX)
 **Files to modify:** ~5 existing files (`package.json`, `App.tsx`, `TopBar.tsx`, `simulation-store.ts`, `ai-interface.ts`, `utility-ai.ts`)
+
+**Removed compared to original plan:**
+- ~~`scripts/generate-placeholders.ts`~~ — replaced by runtime `sprite-generator.ts`
+- ~~`src/assets/sprites/source/*.png`~~ — no binary PNGs needed
+- ~~`src/assets/sprites/packed/*`~~ — no sprite sheet atlas needed
+- ~~`src/components/VillageCanvas.tsx`~~ — single canvas managed by `SimulationView.tsx` directly
+- ~~`free-tex-packer-cli`~~ dependency removed
+- ~~`canvas`~~ (node-canvas) dependency removed
 
 ---
 
 ## Key Design Decisions
 
-### 1. Procedural fallback sprites
+### 1. Runtime procedural sprites (no build pipeline)
 
-The `SpriteManager` always works — even if the sprite sheet fails to load. It generates solid-colored `Texture` objects as fallbacks. This means the simulation view is functional immediately during development, and real pixel art can be swapped in at any time.
+All 29 placeholder sprites are generated at runtime using PixiJS `Graphics` → `RenderTexture`. No offline build step (`free-tex-packer-cli`), no native dependencies (`canvas`), no binary assets in git. The `SpriteManager` always works — it generates procedural textures on initialization and can optionally load a sprite sheet atlas when real pixel art is available. This means zero-friction onboarding: `npm install && npm run dev` shows a working simulation view immediately.
 
 ### 2. Independent camera per village
 
@@ -1098,11 +1097,11 @@ The rendering layer never writes to simulation state. It reads `CompetitionState
 
 ### 4. Tick interpolation for smooth movement
 
-The store tracks `tickProgress` (0–1 within the current tick). The villager renderer lerps positions between the previous tick and current tick using this value. At 1× speed (1 tick/second), this makes villager movement smooth rather than snapping tile-to-tile once per second.
+The store tracks `tickProgress` (0–1 within the current tick). The `VillagerRenderer` maintains a `Map<villagerId, { prevX, prevY }>` that snapshots each villager's position when it detects the simulation tick has advanced. It then lerps between `(prevX, prevY)` and the villager's current position using `tickProgress`. At 1× speed (1 tick/second), this makes villager movement smooth rather than snapping tile-to-tile once per second. The previous position data lives in the rendering layer, not the simulation state.
 
-### 5. Lazy sprite loading
+### 5. Lazy PixiJS initialization
 
-Sprites are loaded only when the simulation view is first opened. Users who only use the metrics dashboard never pay the cost of loading PixiJS textures. This keeps the initial load fast.
+The PixiJS `Application` and procedural textures are created only when the simulation view is first opened. Users who only use the metrics dashboard never pay the cost of WebGL context creation or texture generation. This keeps the initial load fast. The render loop is also paused when the metrics view is active to save GPU.
 
 ### 6. Minimap as Canvas primitive graphics
 
