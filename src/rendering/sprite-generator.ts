@@ -3,7 +3,7 @@
  * All 29 placeholder sprites are generated at startup — no build pipeline needed.
  */
 
-import { Graphics, RenderTexture, type Application, type Renderer } from 'pixi.js'
+import { Graphics, RenderTexture, type Renderer } from 'pixi.js'
 
 const SIZE = 16
 

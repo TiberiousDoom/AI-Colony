@@ -3,7 +3,7 @@
  */
 
 import { Container, Sprite, Graphics } from 'pixi.js'
-import type { Villager } from '../simulation/villager.ts'
+import { NeedType, type Villager } from '../simulation/villager.ts'
 import type { SpriteManager } from './sprite-manager.ts'
 import { actionToAnimation, tickAnimation } from './animation.ts'
 
@@ -107,7 +107,7 @@ export class VillagerRenderer {
       entry.sprite.texture = this.spriteManager.getTexture(animResult.textureName)
 
       // Health bar
-      const healthNeed = v.needs.get('health')
+      const healthNeed = v.needs.get(NeedType.Health)
       if (healthNeed) {
         const ratio = healthNeed.current / healthNeed.max
         const barWidth = this.tileSize * 0.8

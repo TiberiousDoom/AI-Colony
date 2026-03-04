@@ -5,6 +5,7 @@
 import { SimulationEngine, type SimulationConfig } from '../simulation/simulation-engine.ts'
 import type { CompetitionState } from '../simulation/competition-engine.ts'
 import { UtilityAI } from '../simulation/ai/utility-ai.ts'
+import { NeedType } from '../simulation/villager.ts'
 
 export type CheckStatus = 'pass' | 'fail' | 'running' | 'skipped' | 'pending'
 
@@ -462,7 +463,7 @@ const p2WarmthSystem: AcceptanceCheck = {
     // Check villagers have warmth need
     const alive = engine.getState().villagers.filter(v => v.alive)
     if (alive.length === 0) return { status: 'fail', detail: 'No villagers alive at winter' }
-    const hasWarmth = alive.some(v => v.needs.has('warmth'))
+    const hasWarmth = alive.some(v => v.needs.has(NeedType.Warmth))
     if (!hasWarmth) return { status: 'fail', detail: 'Villagers do not have a warmth need' }
     return { status: 'pass', detail: `${alive.length} villagers alive in winter with warmth need` }
   },
