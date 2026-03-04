@@ -3,9 +3,17 @@
  */
 
 import type { SeededRNG } from '../../utils/seed.ts'
-import type { Villager, VillagerAction, VillageStockpile, Position } from '../villager.ts'
+import type { Villager, VillagerAction, VillageStockpile, Position, Season } from '../villager.ts'
 import type { World } from '../world.ts'
-import type { TimeOfDay } from '../actions.ts'
+import type { TimeOfDay, StructureLike } from '../actions.ts'
+
+export interface RandomEventLike {
+  type: string
+  relativePosition: { dx: number; dy: number }
+  radius: number
+  durationTicks: number
+  severity: number
+}
 
 export interface AIDecision {
   action: VillagerAction
@@ -23,6 +31,10 @@ export interface AIWorldView {
   tick: number
   timeOfDay: TimeOfDay
   campfirePosition: Position
+  season: Season
+  structures: ReadonlyArray<Readonly<StructureLike>>
+  activeEvents: ReadonlyArray<Readonly<RandomEventLike>>
+  villageId: string
 }
 
 export interface IAISystem {

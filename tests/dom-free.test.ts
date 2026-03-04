@@ -59,6 +59,40 @@ describe('DOM-free simulation', () => {
     expect(mod.SimulationEngine).toBeTypeOf('function')
   })
 
+  it('structures.ts has no DOM imports', async () => {
+    const mod = await import('../src/simulation/structures.ts')
+    expect(mod.canAfford).toBeTypeOf('function')
+    expect(mod.createStructure).toBeTypeOf('function')
+  })
+
+  it('events.ts has no DOM imports', async () => {
+    const mod = await import('../src/simulation/events.ts')
+    expect(mod.EventScheduler).toBeTypeOf('function')
+    expect(mod.resolveEventPosition).toBeTypeOf('function')
+  })
+
+  it('behavior-tree.ts has no DOM imports', async () => {
+    const mod = await import('../src/simulation/ai/behavior-tree.ts')
+    expect(mod.Selector).toBeTypeOf('function')
+    expect(mod.Sequence).toBeTypeOf('function')
+  })
+
+  it('behavior-tree-ai.ts has no DOM imports', async () => {
+    const mod = await import('../src/simulation/ai/behavior-tree-ai.ts')
+    expect(mod.BehaviorTreeAI).toBeTypeOf('function')
+  })
+
+  it('competition-engine.ts has no DOM imports', async () => {
+    const mod = await import('../src/simulation/competition-engine.ts')
+    expect(mod.CompetitionEngine).toBeTypeOf('function')
+  })
+
+  it('serialization.ts has no DOM imports', async () => {
+    const mod = await import('../src/utils/serialization.ts')
+    expect(mod.serializeNeedsMap).toBeTypeOf('function')
+    expect(mod.deserializeNeedsMap).toBeTypeOf('function')
+  })
+
   it('full simulation can run without DOM', async () => {
     // This is the most important test: a full simulation run
     // If any simulation code touches DOM, this will fail
@@ -81,5 +115,24 @@ describe('DOM-free simulation', () => {
     const state = engine.getState()
     expect(state.tick).toBe(30)
     expect(state.dayCount).toBe(1)
+  })
+
+  it('competition engine can run without DOM', async () => {
+    const { CompetitionEngine } = await import('../src/simulation/competition-engine.ts')
+    const { UtilityAI } = await import('../src/simulation/ai/utility-ai.ts')
+    const { BehaviorTreeAI } = await import('../src/simulation/ai/behavior-tree-ai.ts')
+
+    const engine = new CompetitionEngine({
+      seed: 42,
+      worldWidth: 64,
+      worldHeight: 64,
+      villages: [
+        { id: 'a', name: 'Utility', aiSystem: new UtilityAI(), villagerCount: 5 },
+        { id: 'b', name: 'BT', aiSystem: new BehaviorTreeAI(), villagerCount: 5 },
+      ],
+    })
+
+    for (let i = 0; i < 30; i++) engine.tick()
+    expect(engine.getState().tick).toBe(30)
   })
 })

@@ -6,14 +6,21 @@ import { useSimulationStore } from '../store/simulation-store.ts'
 
 const SPEED_OPTIONS = [1, 2, 4, 8]
 
+const SEASON_LABELS: Record<string, string> = {
+  spring: 'Spring',
+  summer: 'Summer',
+  autumn: 'Autumn',
+  winter: 'Winter',
+}
+
 export function TopBar({ onToggleChecklist }: { onToggleChecklist?: () => void }) {
-  const { state, isRunning, speed, seed, start, pause, reset, setSpeed, setSeed, init } = useSimulationStore()
+  const { competitionState, isRunning, speed, seed, start, pause, reset, setSpeed, setSeed, init } = useSimulationStore()
 
   const handleStartPause = () => {
     if (isRunning) {
       pause()
     } else {
-      if (!state) {
+      if (!competitionState) {
         init(seed)
       }
       start()
@@ -33,9 +40,16 @@ export function TopBar({ onToggleChecklist }: { onToggleChecklist?: () => void }
     setSeed(Math.floor(Math.random() * 1000000))
   }
 
-  const dayCount = state ? state.dayCount + 1 : 0
-  const timeOfDay = state?.timeOfDay ?? 'day'
-  const isOver = state?.isOver ?? false
+  const dayCount = competitionState ? competitionState.dayCount + 1 : 0
+  const timeOfDay = competitionState?.timeOfDay ?? 'day'
+  const season = competitionState?.season ?? 'summer'
+  const isOver = competitionState?.isOver ?? false
+  const winner = competitionState?.winner ?? null
+  const victoryLap = competitionState?.victoryLapRemaining ?? 0
+
+  // Village names for matchup display
+  const villageNames = competitionState?.villages.map(v => v.name) ?? []
+  const winnerVillage = winner ? competitionState?.villages.find(v => v.id === winner) : null
 
   return (
     <div style={{
@@ -51,6 +65,13 @@ export function TopBar({ onToggleChecklist }: { onToggleChecklist?: () => void }
       <div style={{ fontWeight: 700, fontSize: 16, color: '#f1f5f9', marginRight: 8 }}>
         AI Colony
       </div>
+
+      {/* Matchup */}
+      {villageNames.length > 1 && (
+        <div style={{ color: '#94a3b8', fontSize: 12, fontWeight: 600 }}>
+          {villageNames.join(' vs ')}
+        </div>
+      )}
 
       {/* Start / Pause */}
       <button
@@ -108,10 +129,10 @@ export function TopBar({ onToggleChecklist }: { onToggleChecklist?: () => void }
         ))}
       </div>
 
-      {/* Day / Time */}
-      {state && (
+      {/* Day / Time / Season */}
+      {competitionState && (
         <div style={{ color: '#94a3b8', fontSize: 13 }}>
-          Day {dayCount} — {timeOfDay === 'day' ? '☀ Daytime' : '🌙 Night'}
+          Day {dayCount} — {timeOfDay === 'day' ? 'Daytime' : 'Night'} — {SEASON_LABELS[season] ?? season}
         </div>
       )}
 
@@ -150,8 +171,14 @@ export function TopBar({ onToggleChecklist }: { onToggleChecklist?: () => void }
         </button>
       </div>
 
-      {/* End state indicator */}
-      {isOver && (
+      {/* Winner / End state indicator */}
+      {winnerVillage && (
+        <div style={{ color: '#4ade80', fontSize: 13, fontWeight: 600 }}>
+          {winnerVillage.name} wins!
+          {victoryLap > 0 && ` (Victory lap: ${victoryLap} days)`}
+        </div>
+      )}
+      {isOver && !winner && (
         <div style={{ color: '#ef4444', fontSize: 13, fontWeight: 600 }}>
           Simulation Over
         </div>
