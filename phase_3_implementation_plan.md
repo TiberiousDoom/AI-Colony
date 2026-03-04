@@ -4,7 +4,7 @@
 **Date:** March 4, 2026
 **Goal:** Add a pixel art simulation view as a toggle alongside the metrics dashboard. PixiJS rendering with terrain, villagers, structures, day/night, seasons, inspector, and minimap.
 
-**v1.1 changes:** (1) Decoupled render loop from React — standalone rAF reads store.getState() directly; (2) Single WebGL context with dual viewports instead of two PixiJS Applications; (3) Runtime procedural sprites via Graphics→RenderTexture, dropping free-tex-packer-cli and canvas dependencies; (4) Moved canvas + view toggle to Step 3 for immediate visual feedback; (5) Inlined AI scores in AIDecision instead of stateful getLastScores(); (6) Clarified prevPosition tracking for villager movement lerping.
+**v1.1 changes:** (1) Decoupled render loop from React — standalone rAF reads store.getState() directly; (2) Single WebGL context with dual viewports instead of two PixiJS Applications; (3) Runtime procedural sprites via Graphics→RenderTexture, dropping free-tex-packer-cli and canvas dependencies; (4) Moved canvas + view toggle to Step 3 for immediate visual feedback; (5) Inlined AI scores in AIDecision instead of stateful getLastScores(); (6) Clarified prevPosition tracking for villager movement lerping; (7) Added dirty-tile set for efficient tile change detection; (8) Added WebGL context loss handling; (9) Added minimap click-to-pan interaction; (10) Added performance target (60fps), keyboard controls, and PixiJS v8 container culling.
 
 ---
 
@@ -60,6 +60,9 @@ The plan is organized into 12 implementation steps across 5 blocks.
 - **Decoupled render loop** — standalone `requestAnimationFrame` reads `store.getState()` directly, not driven by React re-renders
 - **Runtime procedural sprites** — no offline build pipeline, no binary assets in git
 - **Canvas visible from Step 3** — view toggle and tile rendering wired up immediately, subsequent steps add layers incrementally
+- **Dirty-tile tracking** — `World.dirtyTiles` set avoids O(4096) tile diff per frame
+- **WebGL context loss recovery** — graceful fallback overlay with click-to-restore
+- **Performance target** — 60fps on integrated GPU with both viewports active
 
 ---
 
@@ -98,7 +101,9 @@ The rendering layer is a pure observer of simulation state. It reads `Competitio
 This decoupling is critical for performance. The simulation ticks at 1–8 ticks/sec, but the renderer runs at display refresh rate for smooth interpolation. Funneling state through React (which would re-render the component tree on every tick) is wasteful — PixiJS manages its own DOM via `<canvas>`, so React has nothing useful to reconcile. The React component only handles:
 - **Mounting/unmounting** the PixiJS Application (via `useEffect` cleanup)
 - **Starting/stopping** the render loop
-- **Forwarding DOM events** (click, wheel, drag) to the camera/inspector
+- **Forwarding DOM events** (click, wheel, drag, keyboard) to the camera/inspector
+
+**Performance target:** 60fps with both village viewports active on mid-range hardware (integrated GPU, e.g., Intel Iris). This guides optimization decisions — if a feature (e.g., per-tile alpha updates) drops below this target, it should be optimized or deferred. The single-canvas architecture and dirty-tile tracking (Step 3) are designed to stay well within this budget.
 
 ### Dependencies
 
@@ -107,6 +112,11 @@ npm install pixi.js
 ```
 
 PixiJS v8+ uses the modern `Application` API with `await app.init()`. The rendering system targets WebGL2 with Canvas fallback.
+
+**WebGL context loss handling:** On mobile devices, tab backgrounding, or GPU driver resets, WebGL contexts can be lost. Without handling this, the simulation view would go black with no recovery. The `SimulationView` registers for `webglcontextlost` and `webglcontextrestored` events on the canvas element. PixiJS v8 provides hooks for this. Minimum viable handling:
+- On context loss: pause the render loop, show a "WebGL context lost — click to restore" overlay
+- On context restored (or click): re-initialize the PixiJS Application and regenerate procedural textures
+- The simulation continues running regardless (it's independent of the renderer)
 
 ### New files
 
@@ -287,11 +297,22 @@ No new dependencies. PixiJS (installed in Step 1) provides `Graphics`, `RenderTe
 The tile map is the base rendering layer. Each tile is a 16×16 sprite from the procedural textures (or a fallback colored rectangle). Tiles are created once when the world is first rendered and updated only when tile state changes (resource depletion, blight).
 
 **Rendering approach:**
-- Create a `Container` holding all tile sprites
+- Create a `Container` holding all tile sprites (use `container.cullable = true` for PixiJS v8's built-in container culling instead of manual viewport culling — this simplifies the TileRenderer considerably)
 - Position each sprite at `(tileX * tileSize, tileY * tileSize)`
 - Apply camera transform to the container (position + scale)
-- Cull tiles outside the visible viewport for performance
 - Resource depletion is shown via alpha: `alpha = 0.4 + 0.6 * (resourceAmount / maxResource)` for harvestable tiles
+
+**Efficient tile change detection:** Rather than iterating all 4,096 tiles every frame to check for visual changes, the `World` class exposes a `dirtyTiles: Set<string>` (keyed by `"x,y"`). Simulation methods that modify tiles (`harvestTile`, `applyBlight`, `tickRegeneration`) add entries to this set. The `TileRenderer.updateTiles()` method only re-renders dirty tiles, then clears the set. This is a small addition to the simulation layer (3-4 lines across existing methods) but avoids an O(4096) diff every frame.
+
+```typescript
+// Addition to World class
+readonly dirtyTiles: Set<string> = new Set()  // "x,y" keys
+
+// In harvestTile(), applyBlight(), tickRegeneration():
+this.dirtyTiles.add(`${tile.x},${tile.y}`)
+```
+
+The TileRenderer checks `world.dirtyTiles.size > 0` each frame, updates only those sprites, and calls `world.dirtyTiles.clear()`.
 
 **Campfire rendering:** The campfire position gets a special sprite (warm orange glow effect using a tinted sprite or simple overlay).
 
@@ -354,6 +375,10 @@ export class TileRenderer {
 **`src/components/TopBar.tsx`**
 - Add view toggle button
 
+**`src/simulation/world.ts`**
+- Add `dirtyTiles: Set<string>` field to `World` class
+- Add `this.dirtyTiles.add(...)` calls in `harvestTile()`, `applyBlight()`, `tickRegeneration()` when tile state changes
+
 ### Tests to write
 
 **`tests/tile-renderer.test.ts`** (new file)
@@ -363,6 +388,7 @@ export class TileRenderer {
 - Blighted tiles render with zero alpha
 - Campfire tile uses campfire texture
 - updateCamera applies correct transform to container
+- Only dirty tiles are updated (not all 4096)
 
 ---
 
@@ -869,7 +895,9 @@ Each village gets a minimap in the bottom-left corner of its canvas area. The mi
 
 **Update frequency:** The minimap re-renders every 10 ticks (roughly 3 times per day) to avoid per-tick overhead. Population positions update at this rate too.
 
-**Implementation:** The minimap uses a separate PixiJS `Container` with `Graphics` objects, not individual sprites (at this scale, sprites would be overkill).
+**Click-to-pan:** Clicking on the minimap centers the main camera on the corresponding world coordinates. Dragging on the minimap pans the camera in real time. This is a universally expected minimap interaction (~20 lines of code) and a significant usability win. The coordinate mapping is: `worldX = (clickX / minimapSize) * worldWidth`, `worldY = (clickY / minimapSize) * worldHeight`.
+
+**Implementation:** The minimap uses a separate PixiJS `Container` with `Graphics` objects, not individual sprites (at this scale, sprites would be overkill). The container is `eventMode = 'static'` with `pointertap` and `pointermove` handlers for click-to-pan.
 
 ### New files
 
@@ -887,7 +915,7 @@ export class Minimap {
   private readonly worldWidth: number
   private readonly worldHeight: number
 
-  constructor(worldWidth: number, worldHeight: number, size?: number)
+  constructor(worldWidth: number, worldHeight: number, onPan: (worldX: number, worldY: number) => void, size?: number)
 
   /** Render minimap from current state */
   update(
@@ -912,6 +940,8 @@ export class Minimap {
 - Terrain colors map correctly to tile types
 - Villager dots appear at correct scaled positions
 - Viewport rectangle reflects camera bounds
+- Click-to-pan calls onPan with correct world coordinates
+- Drag on minimap continuously pans camera
 - Update can be called repeatedly without memory leak
 
 ---
@@ -926,7 +956,12 @@ The view toggle was introduced in Step 3 (so tiles were visible immediately). Th
 
 **Lazy initialization:** The PixiJS `Application` and procedural textures are created on first view switch. A loading indicator ("Loading simulation view...") is shown during initialization (~100ms). Subsequent view switches are instant because the `Application` is retained (not destroyed on switch-away).
 
-**Keyboard shortcut:** `Tab` key toggles between views (when not focused on an input).
+**Keyboard controls:**
+- `Tab` — toggle between metrics and simulation views (when not focused on an input)
+- `Arrow keys` — pan camera in the focused village viewport
+- `+` / `-` — zoom in/out
+- `Escape` — close inspector panel (if open)
+- `[` / `]` — cycle selected villager in the focused viewport (for keyboard-only inspection)
 
 **Toggle behavior (already in place from Step 3, polished here):**
 - Default view: Metrics Dashboard (per master plan: "Stealth Mode")
@@ -1069,7 +1104,7 @@ Note: Steps 6 (day/night) and 7 (seasons) are independent of each other and can 
 
 **Total new files:** ~28 (no binary assets — all sprites generated at runtime)
 **Total estimated new code:** ~2,500 lines (TypeScript/TSX)
-**Files to modify:** ~5 existing files (`package.json`, `App.tsx`, `TopBar.tsx`, `simulation-store.ts`, `ai-interface.ts`, `utility-ai.ts`)
+**Files to modify:** ~6 existing files (`package.json`, `App.tsx`, `TopBar.tsx`, `simulation-store.ts`, `ai-interface.ts`, `utility-ai.ts`, `world.ts`)
 
 **Removed compared to original plan:**
 - ~~`scripts/generate-placeholders.ts`~~ — replaced by runtime `sprite-generator.ts`
@@ -1105,7 +1140,15 @@ The PixiJS `Application` and procedural textures are created only when the simul
 
 ### 6. Minimap as Canvas primitive graphics
 
-The minimap uses PixiJS `Graphics` (rectangles and dots) rather than individual sprites. At 1.5px per tile, sprites would be wasteful. Graphics primitives are batched efficiently and render the whole minimap in a single draw call.
+The minimap uses PixiJS `Graphics` (rectangles and dots) rather than individual sprites. At 1.5px per tile, sprites would be wasteful. Graphics primitives are batched efficiently and render the whole minimap in a single draw call. Click-to-pan and drag-to-pan are supported for intuitive camera navigation.
+
+### 7. Dirty-tile change detection
+
+The `World` class maintains a `dirtyTiles: Set<string>` that tracks which tiles have changed since the last render. Simulation methods (`harvestTile`, `applyBlight`, `tickRegeneration`) add to this set. The `TileRenderer` only updates dirty tiles each frame, avoiding an O(4096) per-frame comparison. Combined with PixiJS v8's built-in container culling (`container.cullable = true`), this keeps tile rendering efficient.
+
+### 8. WebGL context loss recovery
+
+Mobile devices, tab backgrounding, and GPU driver resets can cause WebGL context loss. The renderer handles this gracefully: on `webglcontextlost`, it pauses the render loop and shows an overlay message. On recovery (automatic or user-initiated), it re-initializes the Application and regenerates textures. The simulation is unaffected since it runs independently of the renderer.
 
 ---
 
