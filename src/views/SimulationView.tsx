@@ -1,6 +1,6 @@
 /**
- * SimulationView: PixiJS-based dual village renderer.
- * Creates a single PixiJS Application with two VillageRenderer viewports.
+ * SimulationView: PixiJS-based N-village renderer.
+ * Creates a single PixiJS Application with one VillageRenderer viewport per village.
  * The render loop runs on rAF, reading store.getState() directly (decoupled from React).
  */
 
@@ -31,7 +31,7 @@ export function SimulationView() {
   const [selection, setSelection] = useState<SelectedVillager | null>(null)
   const lastTickRef = useRef(0)
 
-  // Track focused viewport (0 = left, 1 = right)
+  // Track focused viewport index
   const focusedViewportRef = useRef(0)
 
   const initPixi = useCallback(async () => {
@@ -73,13 +73,14 @@ export function SimulationView() {
 
     // Get initial state to create renderers
     const state = useSimulationStore.getState().competitionState
-    if (state && state.villages.length >= 2) {
-      const halfWidth = Math.floor(width / 2)
-      for (let i = 0; i < 2; i++) {
+    if (state && state.villages.length >= 1) {
+      const villageCount = state.villages.length
+      const segmentWidth = Math.floor(width / villageCount)
+      for (let i = 0; i < villageCount; i++) {
         const village = state.villages[i]
-        const color = VILLAGE_COLORS[village.id] ?? (i === 0 ? 0x3b82f6 : 0xf97316)
+        const color = VILLAGE_COLORS[village.id] ?? 0x3b82f6
         const renderer = new VillageRenderer(spriteManager, color, village.world.width, village.world.height)
-        renderer.init(i * halfWidth, halfWidth, height)
+        renderer.init(i * segmentWidth, segmentWidth, height)
         app.stage.addChild(renderer.rootContainer)
         renderersRef.current.push(renderer)
       }
@@ -99,7 +100,7 @@ export function SimulationView() {
 
       const store = useSimulationStore.getState()
       const state = store.competitionState
-      if (!state || state.villages.length < 2) {
+      if (!state || state.villages.length < 1) {
         rafRef.current = requestAnimationFrame(renderFrame)
         return
       }
@@ -109,7 +110,7 @@ export function SimulationView() {
       const tickProgress = currentTick !== lastTickRef.current ? 0 : Math.min(1, deltaMs / 100)
       lastTickRef.current = currentTick
 
-      for (let i = 0; i < Math.min(2, renderersRef.current.length); i++) {
+      for (let i = 0; i < Math.min(state.villages.length, renderersRef.current.length); i++) {
         renderersRef.current[i].render(
           state.villages[i],
           state.timeOfDay,
@@ -151,8 +152,9 @@ export function SimulationView() {
       const w = containerRef.current.clientWidth
       const h = containerRef.current.clientHeight
       appRef.current.renderer.resize(w, h)
-      const half = Math.floor(w / 2)
-      renderersRef.current.forEach((r, i) => r.resize(i * half, half, h))
+      const count = renderersRef.current.length
+      const segmentWidth = count > 0 ? Math.floor(w / count) : w
+      renderersRef.current.forEach((r, i) => r.resize(i * segmentWidth, segmentWidth, h))
     }
 
     window.addEventListener('resize', handleResize)
@@ -164,13 +166,14 @@ export function SimulationView() {
     if (!containerRef.current) return
     const rect = containerRef.current.getBoundingClientRect()
     const x = e.clientX - rect.left
-    const half = rect.width / 2
-    const viewportIdx = x < half ? 0 : 1
+    const count = renderersRef.current.length || 1
+    const segmentWidth = rect.width / count
+    const viewportIdx = Math.min(count - 1, Math.max(0, Math.floor(x / segmentWidth)))
     focusedViewportRef.current = viewportIdx
 
     // Left click = select villager
     if (e.button === 0) {
-      const localX = x - viewportIdx * half
+      const localX = x - viewportIdx * segmentWidth
       const localY = e.clientY - rect.top
       const renderer = renderersRef.current[viewportIdx]
       if (renderer) {
@@ -221,14 +224,15 @@ export function SimulationView() {
     if (!containerRef.current) return
     const rect = containerRef.current.getBoundingClientRect()
     const x = e.clientX - rect.left
-    const half = rect.width / 2
-    const viewportIdx = x < half ? 0 : 1
-    const localX = x - viewportIdx * half
+    const count = renderersRef.current.length || 1
+    const segmentWidth = rect.width / count
+    const viewportIdx = Math.min(count - 1, Math.max(0, Math.floor(x / segmentWidth)))
+    const localX = x - viewportIdx * segmentWidth
     const localY = e.clientY - rect.top
 
     const renderer = renderersRef.current[viewportIdx]
     if (renderer) {
-      renderer.camera.zoomAt(localX, localY, e.deltaY, half, rect.height)
+      renderer.camera.zoomAt(localX, localY, e.deltaY, segmentWidth, rect.height)
     }
   }, [])
 
@@ -339,14 +343,34 @@ export function SimulationView() {
       />
 
       {/* Village labels */}
-      {state && state.villages.length >= 2 && !loading && (
+      {state && state.villages.length >= 1 && !loading && (
         <>
-          <div style={{ position: 'absolute', top: 8, left: 12, color: '#3b82f6', fontSize: 12, fontWeight: 600, opacity: 0.7 }}>
-            {state.villages[0].name}
-          </div>
-          <div style={{ position: 'absolute', top: 8, right: 12, color: '#f97316', fontSize: 12, fontWeight: 600, opacity: 0.7, textAlign: 'right' }}>
-            {state.villages[1].name}
-          </div>
+          {state.villages.map((village, i) => {
+            const count = state.villages.length
+            const segmentPct = 100 / count
+            const color = village.id in VILLAGE_COLORS
+              ? '#' + VILLAGE_COLORS[village.id].toString(16).padStart(6, '0')
+              : '#3b82f6'
+            return (
+              <div
+                key={village.id}
+                style={{
+                  position: 'absolute',
+                  top: 8,
+                  left: `${i * segmentPct}%`,
+                  width: `${segmentPct}%`,
+                  textAlign: 'center',
+                  color,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  opacity: 0.7,
+                  pointerEvents: 'none',
+                }}
+              >
+                {village.name}
+              </div>
+            )
+          })}
         </>
       )}
 
@@ -355,9 +379,14 @@ export function SimulationView() {
         <VillagerInspector
           villager={selectedVillager}
           villageName={selectedVillage.name}
-          villageColor={selectedVillage.id === 'utility' ? '#3b82f6' : '#f97316'}
+          villageColor={
+            selectedVillage.id in VILLAGE_COLORS
+              ? '#' + VILLAGE_COLORS[selectedVillage.id].toString(16).padStart(6, '0')
+              : '#3b82f6'
+          }
           aiName={selectedVillage.aiSystem.name}
           scores={selectedVillager.lastDecision?.scores}
+          goapPlan={selectedVillager.lastDecision?.goapPlan}
           onClose={() => {
             setSelection(null)
             renderersRef.current[selection!.villageIndex]?.setSelectedVillager(null)

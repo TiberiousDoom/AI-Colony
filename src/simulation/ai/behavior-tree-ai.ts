@@ -35,10 +35,11 @@ function findNearestTileOfType(
   villager: Readonly<Villager>,
   worldView: AIWorldView,
   tileType: typeof TileType[keyof typeof TileType],
+  requireResources = true,
 ): Position | undefined {
   const tiles = worldView.world.findTilesInRadius(
     villager.position.x, villager.position.y, 15,
-    t => t.type === tileType && t.resourceAmount > 0,
+    t => t.type === tileType && (!requireResources || t.resourceAmount > 0),
   )
   if (tiles.length === 0) return undefined
   tiles.sort((a, b) => {
@@ -262,6 +263,58 @@ function buildVillagerTree(villager: Readonly<Villager>, wv: AIWorldView): BTNod
         }
         return { action: 'idle', reason: 'BT: need stone but none found' }
       }),
+    ]),
+    // Build watchtower: pop > 5, no watchtower, can afford
+    new Sequence([
+      new Condition((ctx) => {
+        const pop = ctx.worldView.villagers.filter(v => v.alive).length
+        const hasWT = ctx.worldView.structures.some(s => s.type === 'watchtower')
+        return !hasWT && pop > 5 && ctx.worldView.stockpile.wood >= 10 && ctx.worldView.stockpile.stone >= 15
+      }),
+      new ActionNode((ctx) => ({
+        action: 'build_watchtower',
+        targetPosition: { ...ctx.worldView.campfirePosition },
+        reason: 'BT: pop > 5 → build watchtower',
+      })),
+    ]),
+    // Build farm: fertile soil available, no farm, can afford
+    new Sequence([
+      new Condition((ctx) => {
+        const hasFarm = ctx.worldView.structures.some(s => s.type === 'farm')
+        return !hasFarm && ctx.worldView.stockpile.wood >= 15
+      }),
+      new ActionNode((ctx) => {
+        const fertile = findNearestTileOfType(villager, ctx.worldView, TileType.FertileSoil, false)
+        if (fertile) {
+          return { action: 'build_farm', targetPosition: fertile, reason: 'BT: need farm → build farm' }
+        }
+        return { action: 'idle', reason: 'BT: need farm but no fertile soil' }
+      }),
+    ]),
+    // Build wall: after predator event, no wall, can afford
+    new Sequence([
+      new Condition((ctx) => {
+        const hasWallStruct = ctx.worldView.structures.some(s => s.type === 'wall')
+        const hadPredator = ctx.worldView.activeEvents.some(e => e.type === 'predator')
+        return !hasWallStruct && hadPredator && ctx.worldView.stockpile.stone >= 12
+      }),
+      new ActionNode((ctx) => ({
+        action: 'build_wall',
+        targetPosition: { ...ctx.worldView.campfirePosition },
+        reason: 'BT: predator threat → build wall',
+      })),
+    ]),
+    // Build well: no well, can afford
+    new Sequence([
+      new Condition((ctx) => {
+        const hasWellStruct = ctx.worldView.structures.some(s => s.type === 'well')
+        return !hasWellStruct && ctx.worldView.stockpile.stone >= 20
+      }),
+      new ActionNode((ctx) => ({
+        action: 'build_well',
+        targetPosition: { ...ctx.worldView.campfirePosition },
+        reason: 'BT: need well → build well',
+      })),
     ]),
   ])
 

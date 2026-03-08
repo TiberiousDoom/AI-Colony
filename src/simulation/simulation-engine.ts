@@ -508,6 +508,7 @@ export class SimulationEngine {
     const actionTypes: VillagerAction[] = [
       'idle', 'forage', 'eat', 'rest', 'chop_wood', 'mine_stone',
       'haul', 'fish', 'flee', 'build_shelter', 'build_storage', 'warm_up',
+      'build_watchtower', 'build_farm', 'build_wall', 'build_well',
     ]
     for (const a of actionTypes) activityBreakdown[a] = 0
     for (const v of alive) {

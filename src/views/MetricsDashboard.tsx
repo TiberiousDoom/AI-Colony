@@ -17,6 +17,7 @@ import type { SimulationEvent } from '../simulation/simulation-engine.ts'
 const VILLAGE_COLORS: Record<string, string> = {
   utility: '#3b82f6',
   bt: '#f97316',
+  goap: '#10b981',
 }
 
 export function MetricsDashboard() {
@@ -235,6 +236,7 @@ function computeActivityData(villages: VillageState[]) {
   const order: VillagerAction[] = [
     'idle', 'forage', 'eat', 'rest', 'chop_wood', 'mine_stone',
     'haul', 'fish', 'flee', 'build_shelter', 'build_storage', 'warm_up',
+    'build_watchtower', 'build_farm', 'build_wall', 'build_well',
   ]
 
   return order

@@ -6,7 +6,7 @@
 import type { SeededRNG } from '../utils/seed.ts'
 import type { Position, Season } from './villager.ts'
 
-export type RandomEventType = 'predator' | 'blight' | 'cold_snap'
+export type RandomEventType = 'predator' | 'blight' | 'cold_snap' | 'illness' | 'storm' | 'resource_discovery'
 
 export interface RandomEvent {
   type: RandomEventType
@@ -49,13 +49,18 @@ export class EventScheduler {
     // Determine event type
     const roll = this.rng.next()
 
-    if (season === 'autumn' && roll < 0.4) {
-      // Cold snap fires mid-autumn only
+    if (season === 'autumn' && roll < 0.3) {
       return this.createColdSnap(dayCount)
-    } else if (roll < 0.5) {
+    } else if (roll < 0.4) {
       return this.createPredator(dayCount)
-    } else {
+    } else if (roll < 0.55) {
+      return this.createIllness(dayCount)
+    } else if (roll < 0.7) {
+      return this.createStorm(dayCount)
+    } else if (roll < 0.85) {
       return this.createBlight(dayCount)
+    } else {
+      return this.createResourceDiscovery(dayCount)
     }
   }
 
@@ -112,6 +117,41 @@ export class EventScheduler {
       radius: 999, // Affects entire map
       durationTicks: 60, // 2 days = 60 ticks
       severity: 3, // Warmth drain rate
+    }
+  }
+
+  createIllness(dayCount: number): RandomEvent {
+    return {
+      type: 'illness',
+      triggerTick: dayCount,
+      relativePosition: { dx: 0, dy: 0 },
+      radius: 999,
+      durationTicks: 150, // 5 days
+      severity: 2, // Drain rate multiplier
+    }
+  }
+
+  createStorm(dayCount: number): RandomEvent {
+    return {
+      type: 'storm',
+      triggerTick: dayCount,
+      relativePosition: { dx: 0, dy: 0 },
+      radius: 999,
+      durationTicks: 30, // 1 day
+      severity: 1.5, // Duration multiplier for outdoor actions
+    }
+  }
+
+  createResourceDiscovery(dayCount: number): RandomEvent {
+    const dx = this.rng.nextInt(-6, 6)
+    const dy = this.rng.nextInt(-6, 6)
+    return {
+      type: 'resource_discovery',
+      triggerTick: dayCount,
+      relativePosition: { dx, dy },
+      radius: 3,
+      durationTicks: 1, // Instant — processed once
+      severity: 0,
     }
   }
 }

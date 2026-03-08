@@ -7,6 +7,7 @@ import { create } from 'zustand'
 import { CompetitionEngine, type CompetitionState, type CompetitionConfig } from '../simulation/competition-engine.ts'
 import { UtilityAI } from '../simulation/ai/utility-ai.ts'
 import { BehaviorTreeAI } from '../simulation/ai/behavior-tree-ai.ts'
+import { GOAPAI } from '../simulation/ai/goap-ai.ts'
 
 const TICK_INTERVAL_MS = 1000 // 1 tick per second at 1× speed
 
@@ -20,7 +21,7 @@ interface SimulationStore {
   /** World seed */
   seed: number
   /** Current view mode */
-  viewMode: 'metrics' | 'simulation'
+  viewMode: 'metrics' | 'simulation' | 'results'
 
   // Actions
   init: (seed: number) => void
@@ -29,7 +30,7 @@ interface SimulationStore {
   reset: () => void
   setSpeed: (speed: number) => void
   setSeed: (seed: number) => void
-  setViewMode: (mode: 'metrics' | 'simulation') => void
+  setViewMode: (mode: 'metrics' | 'simulation' | 'results') => void
 }
 
 let engine: CompetitionEngine | null = null
@@ -86,9 +87,9 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
         } as CompetitionState,
       })
 
-      // Auto-pause when simulation ends
+      // Auto-pause when simulation ends → switch to results view
       if (newState.isOver) {
-        set({ isRunning: false })
+        set({ isRunning: false, viewMode: 'results' })
         stopLoop()
         return
       }
@@ -120,6 +121,12 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
             id: 'bt',
             name: 'Behavior Tree',
             aiSystem: new BehaviorTreeAI(),
+            villagerCount: 10,
+          },
+          {
+            id: 'goap',
+            name: 'GOAP',
+            aiSystem: new GOAPAI(),
             villagerCount: 10,
           },
         ],
@@ -164,7 +171,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
       set({ seed })
     },
 
-    setViewMode(mode: 'metrics' | 'simulation') {
+    setViewMode(mode: 'metrics' | 'simulation' | 'results') {
       set({ viewMode: mode })
     },
   }

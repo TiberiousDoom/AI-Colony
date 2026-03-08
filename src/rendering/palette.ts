@@ -39,6 +39,7 @@ export const BASE_TINTS: Partial<Record<TileType, number>> = {
 export const VILLAGE_COLORS: Record<string, number> = {
   utility: 0x3b82f6,   // Blue
   bt: 0xf97316,        // Orange
+  goap: 0x10b981,      // Emerald green
 }
 
 /** Get tint for a tile type in a given season */

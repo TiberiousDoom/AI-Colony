@@ -96,12 +96,29 @@ export class TileRenderer {
     }
   }
 
-  /** Update camera transform (position + zoom) */
+  /** Update camera transform and cull off-screen tiles */
   updateCamera(camera: Camera, canvasWidth: number, canvasHeight: number): void {
     const t = camera.getTransform(canvasWidth, canvasHeight)
     this.container.x = t.x
     this.container.y = t.y
     this.container.scale.set(t.scale)
+
+    // Frustum culling: hide tiles outside viewport
+    if (this.tileSprites.length === 0) return
+    const scaledTile = this.tileSize * t.scale
+    const margin = 2 // extra tiles around edges
+    const minX = Math.max(0, Math.floor(-t.x / scaledTile) - margin)
+    const maxX = Math.min((this.tileSprites[0]?.length ?? 0) - 1, Math.ceil((-t.x + canvasWidth) / scaledTile) + margin)
+    const minY = Math.max(0, Math.floor(-t.y / scaledTile) - margin)
+    const maxY = Math.min(this.tileSprites.length - 1, Math.ceil((-t.y + canvasHeight) / scaledTile) + margin)
+
+    for (let y = 0; y < this.tileSprites.length; y++) {
+      const row = this.tileSprites[y]
+      const inY = y >= minY && y <= maxY
+      for (let x = 0; x < row.length; x++) {
+        row[x].visible = inY && x >= minX && x <= maxX
+      }
+    }
   }
 
   destroy(): void {

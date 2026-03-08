@@ -39,6 +39,10 @@ const WEIGHTS: Record<string, ActionWeights> = {
   build_storage: { hunger: 0.0, energy: 0.1, health: 0.1, warmth: 0.0 },
   warm_up:       { hunger: 0.0, energy: 0.0, health: 0.2, warmth: 1.0 },
   flee:          { hunger: 0.0, energy: 0.0, health: 1.0, warmth: 0.0 },
+  build_watchtower: { hunger: 0.0, energy: 0.1, health: 0.3, warmth: 0.0 },
+  build_farm:       { hunger: 0.3, energy: 0.1, health: 0.1, warmth: 0.0 },
+  build_wall:       { hunger: 0.0, energy: 0.1, health: 0.3, warmth: 0.0 },
+  build_well:       { hunger: 0.2, energy: 0.1, health: 0.1, warmth: 0.0 },
 }
 
 // --- Score Calculation ---
@@ -156,6 +160,44 @@ function scoreAction(
     reasons.push('low stone +0.2')
   }
 
+  // Build watchtower: when pop > 5 and no watchtower
+  if (action.type === 'build_watchtower') {
+    const hasWatchtower = worldView.structures.some(s => s.type === 'watchtower')
+    const pop = worldView.villagers.filter(v => v.alive).length
+    if (!hasWatchtower && pop > 5 && worldView.stockpile.wood >= 10 && worldView.stockpile.stone >= 15) {
+      envMod += 0.3
+      reasons.push('need watchtower +0.3')
+    }
+  }
+
+  // Build farm: when fertile soil available and no farm
+  if (action.type === 'build_farm') {
+    const hasFarm = worldView.structures.some(s => s.type === 'farm')
+    if (!hasFarm && worldView.stockpile.wood >= 15) {
+      envMod += 0.25
+      reasons.push('need farm +0.25')
+    }
+  }
+
+  // Build wall: after predator event and no wall
+  if (action.type === 'build_wall') {
+    const hasWallStruct = worldView.structures.some(s => s.type === 'wall')
+    const hadPredator = worldView.activeEvents.some(e => e.type === 'predator')
+    if (!hasWallStruct && hadPredator && worldView.stockpile.stone >= 12) {
+      envMod += 0.35
+      reasons.push('need wall (predator) +0.35')
+    }
+  }
+
+  // Build well: when no well and could benefit from water access
+  if (action.type === 'build_well') {
+    const hasWellStruct = worldView.structures.some(s => s.type === 'well')
+    if (!hasWellStruct && worldView.stockpile.stone >= 20) {
+      envMod += 0.2
+      reasons.push('need well +0.2')
+    }
+  }
+
   // Autumn stockpiling bonus
   if (worldView.season === 'autumn' && (action.type === 'forage' || action.type === 'fish' || action.type === 'chop_wood')) {
     envMod += 0.15
@@ -243,8 +285,24 @@ function findTargetForAction(
     case 'haul':
     case 'build_shelter':
     case 'build_storage':
+    case 'build_watchtower':
+    case 'build_wall':
+    case 'build_well':
     case 'warm_up':
       return { ...worldView.campfirePosition }
+    case 'build_farm': {
+      const fertile = worldView.world.findTilesInRadius(
+        villager.position.x, villager.position.y, 15,
+        t => t.type === TileType.FertileSoil,
+      )
+      if (fertile.length === 0) return worldView.campfirePosition
+      fertile.sort((a, b) => {
+        const da = Math.abs(a.x - villager.position.x) + Math.abs(a.y - villager.position.y)
+        const db = Math.abs(b.x - villager.position.x) + Math.abs(b.y - villager.position.y)
+        return da - db
+      })
+      return { x: fertile[0].x, y: fertile[0].y }
+    }
     case 'flee': {
       // Flee away from predator
       const predator = worldView.activeEvents.find(e => e.type === 'predator')

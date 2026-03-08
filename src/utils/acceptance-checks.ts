@@ -9,7 +9,7 @@ import { NeedType } from '../simulation/villager.ts'
 
 export type CheckStatus = 'pass' | 'fail' | 'running' | 'skipped' | 'pending'
 
-export type Phase = 1 | 2 | 3
+export type Phase = 1 | 2 | 3 | 4
 
 export interface AcceptanceCheck {
   id: string
@@ -643,11 +643,11 @@ const p2DualVillages: AcceptanceCheck = {
   async run(ctx) {
     const state = ctx.storeState.simState
     if (!state) return { status: 'fail', detail: 'No competition state — start the simulation first' }
-    if (state.villages.length !== 2) {
-      return { status: 'fail', detail: `Expected 2 villages, got ${state.villages.length}` }
+    if (state.villages.length < 2) {
+      return { status: 'fail', detail: `Expected at least 2 villages, got ${state.villages.length}` }
     }
     const names = state.villages.map(v => v.name)
-    return { status: 'pass', detail: `Two villages running: ${names.join(' vs ')}` }
+    return { status: 'pass', detail: `${state.villages.length} villages running: ${names.join(' vs ')}` }
   },
 }
 
@@ -1095,6 +1095,175 @@ const p3ProceduralTextures: AcceptanceCheck = {
   },
 }
 
+// =====================================================================
+// PHASE 4 — GOAP AI, New Content, Three Villages, Results
+// =====================================================================
+
+const p4GoapValid: AcceptanceCheck = {
+  id: 'p4-goap-valid',
+  phase: 4,
+  label: 'GOAP AI produces valid decisions',
+  description: 'GOAP AI villagers perform valid actions over 100 ticks.',
+  category: 'ai-behavior',
+  autoDetect: true,
+  async run(ctx) {
+    try {
+      const { GOAPAI } = await import('../simulation/ai/goap-ai.ts')
+      const config = { ...defaultConfig(42), aiSystem: new GOAPAI() }
+      const engine = ctx.createEngine(config)
+      const actions = new Set<string>()
+      for (let i = 0; i < 100; i++) {
+        engine.tick()
+        for (const v of engine.getState().villagers) {
+          if (v.alive) actions.add(v.currentAction)
+        }
+      }
+      if (actions.size < 2) {
+        return { status: 'fail', detail: `GOAP AI only used ${actions.size} action type(s): ${[...actions].join(', ')}` }
+      }
+      return { status: 'pass', detail: `GOAP AI used ${actions.size} action types: ${[...actions].join(', ')}` }
+    } catch (e) {
+      return { status: 'fail', detail: `GOAPAI not available: ${e}` }
+    }
+  },
+}
+
+const p4ThreeVillages: AcceptanceCheck = {
+  id: 'p4-three-villages',
+  phase: 4,
+  label: 'Three villages run simultaneously',
+  description: 'Competition state has 3 villages with distinct AI systems.',
+  category: 'competition',
+  autoDetect: true,
+  async run(ctx) {
+    const state = ctx.storeState.simState
+    if (!state) return { status: 'fail', detail: 'No competition state — start the simulation first' }
+    if (state.villages.length !== 3) {
+      return { status: 'fail', detail: `Expected 3 villages, got ${state.villages.length}` }
+    }
+    const names = state.villages.map(v => v.name)
+    return { status: 'pass', detail: `Three villages running: ${names.join(', ')}` }
+  },
+}
+
+const p4NewStructures: AcceptanceCheck = {
+  id: 'p4-new-structures',
+  phase: 4,
+  label: 'New structure types are buildable',
+  description: 'Watchtower, farm, wall, or well built within 2000 ticks.',
+  category: 'simulation',
+  autoDetect: true,
+  async run(ctx) {
+    const engine = ctx.createEngine(defaultConfig(42))
+    const newTypes = new Set(['watchtower', 'farm', 'wall', 'well'])
+    for (let i = 0; i < 2000; i++) {
+      engine.tick()
+      if (engine.getState().isOver) break
+      for (const s of engine.getState().structures) {
+        if (newTypes.has(s.type)) {
+          return { status: 'pass', detail: `New structure '${s.type}' built at tick ${i}` }
+        }
+      }
+    }
+    return { status: 'fail', detail: 'No new structure types built in 2000 ticks' }
+  },
+}
+
+const p4NewEvents: AcceptanceCheck = {
+  id: 'p4-new-events',
+  phase: 4,
+  label: 'New event types fire',
+  description: 'Illness, storm, or resource discovery event observed.',
+  category: 'simulation',
+  autoDetect: true,
+  async run(ctx) {
+    const state = ctx.storeState.simState
+    if (!state) return { status: 'fail', detail: 'No competition state' }
+    const newTypes = ['illness', 'storm', 'resource_discovery']
+    const seen = state.globalEvents.filter(e => newTypes.includes(e.type as string))
+    if (seen.length > 0) {
+      return { status: 'pass', detail: `New events observed: ${seen.map(e => e.type).join(', ')}` }
+    }
+    return { status: 'fail', detail: 'No new event types observed yet — run the simulation longer' }
+  },
+}
+
+const p4ResultsScreen: AcceptanceCheck = {
+  id: 'p4-results-screen',
+  phase: 4,
+  label: 'Results summary screen exists',
+  description: 'ResultsSummary component is importable.',
+  category: 'ui',
+  autoDetect: true,
+  async run() {
+    try {
+      await import('../views/ResultsSummary.tsx')
+      return { status: 'pass', detail: 'ResultsSummary module loaded' }
+    } catch (e) {
+      return { status: 'fail', detail: `ResultsSummary not available: ${e}` }
+    }
+  },
+}
+
+const p4ExportWorks: AcceptanceCheck = {
+  id: 'p4-export-works',
+  phase: 4,
+  label: 'Export utilities produce valid output',
+  description: 'exportRunJSON and exportMetricsCSV produce non-empty blobs.',
+  category: 'ui',
+  autoDetect: true,
+  async run(ctx) {
+    const state = ctx.storeState.simState
+    if (!state) return { status: 'fail', detail: 'No competition state' }
+    try {
+      const { exportRunJSON, exportMetricsCSV } = await import('./export.ts')
+      const jsonBlob = exportRunJSON(state)
+      const csvBlob = exportMetricsCSV(state)
+      if (jsonBlob.size === 0) return { status: 'fail', detail: 'JSON export is empty' }
+      if (csvBlob.size === 0) return { status: 'fail', detail: 'CSV export is empty' }
+      return { status: 'pass', detail: `JSON: ${jsonBlob.size} bytes, CSV: ${csvBlob.size} bytes` }
+    } catch (e) {
+      return { status: 'fail', detail: `Export error: ${e}` }
+    }
+  },
+}
+
+const p4GoapPlanDisplay: AcceptanceCheck = {
+  id: 'p4-goap-plan-display',
+  phase: 4,
+  label: 'GOAP plan visible in inspector',
+  description: 'Manual check: clicking a GOAP villager shows plan steps in inspector.',
+  category: 'inspector',
+  autoDetect: false,
+  async run() {
+    return { status: 'pass' }
+  },
+}
+
+const p4Particles: AcceptanceCheck = {
+  id: 'p4-particles',
+  phase: 4,
+  label: 'Particle effects on action completion',
+  description: 'Manual check: particles appear when villagers complete chop/forage/mine/build.',
+  category: 'rendering',
+  autoDetect: false,
+  async run() {
+    return { status: 'pass' }
+  },
+}
+
+const p4StatusIcons: AcceptanceCheck = {
+  id: 'p4-status-icons',
+  phase: 4,
+  label: 'Status icons above villagers',
+  description: 'Manual check: colored dots appear above hungry/tired/fleeing/sick villagers.',
+  category: 'rendering',
+  autoDetect: false,
+  async run() {
+    return { status: 'pass' }
+  },
+}
+
 // --- Export All Checks ---
 
 export const ALL_CHECKS: AcceptanceCheck[] = [
@@ -1126,6 +1295,10 @@ export const ALL_CHECKS: AcceptanceCheck[] = [
   p3MinimapTerrain, p3MinimapVillagers, p3MinimapViewport,
   // Phase 3 — Integration
   p3ViewToggle, p3SimContinuesAcrossViews, p3DualVillageRender, p3ProceduralTextures,
+
+  // Phase 4 — GOAP & Content
+  p4GoapValid, p4ThreeVillages, p4NewStructures, p4NewEvents,
+  p4ResultsScreen, p4ExportWorks, p4GoapPlanDisplay, p4Particles, p4StatusIcons,
 ]
 
 export const CATEGORIES = [

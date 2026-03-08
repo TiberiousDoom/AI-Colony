@@ -20,7 +20,7 @@ export const SPRITE_NAMES = [
   // Villager flee
   'villager_flee_0', 'villager_flee_1', 'villager_flee_2', 'villager_flee_3',
   // Structures
-  'structure_shelter', 'structure_storage',
+  'structure_shelter', 'structure_storage', 'structure_watchtower', 'structure_farm', 'structure_wall', 'structure_well',
   // Resources
   'resource_food', 'resource_wood', 'resource_stone',
   // UI
@@ -102,20 +102,53 @@ function drawVillager(g: Graphics, variant: string, frameIndex: number): void {
 }
 
 function drawStructure(g: Graphics, name: string): void {
-  if (name === 'structure_shelter') {
-    // Triangular roof
-    g.poly([8, 1, 1, 8, 15, 8]).fill(0x8b4513)
-    // Wall
-    g.rect(3, 8, 10, 6).fill(0xa0522d)
-    // Door
-    g.rect(6, 10, 4, 4).fill(0x4a2a0a)
-  } else {
-    // Storage box
-    g.rect(2, 4, 12, 10).fill(0x6b3a1f)
-    // Lid
-    g.rect(1, 3, 14, 2).fill(0x7a4a2a)
-    // Band
-    g.rect(2, 8, 12, 1).fill(0x555555)
+  switch (name) {
+    case 'structure_shelter':
+      // Triangular roof
+      g.poly([8, 1, 1, 8, 15, 8]).fill(0x8b4513)
+      // Wall
+      g.rect(3, 8, 10, 6).fill(0xa0522d)
+      // Door
+      g.rect(6, 10, 4, 4).fill(0x4a2a0a)
+      break
+    case 'structure_storage':
+      // Storage box
+      g.rect(2, 4, 12, 10).fill(0x6b3a1f)
+      // Lid
+      g.rect(1, 3, 14, 2).fill(0x7a4a2a)
+      // Band
+      g.rect(2, 8, 12, 1).fill(0x555555)
+      break
+    case 'structure_watchtower':
+      // Tall tower with platform
+      g.rect(6, 2, 4, 12).fill(0x8b6914)
+      // Platform
+      g.rect(2, 1, 12, 3).fill(0xa07828)
+      // Cross beams
+      g.rect(4, 7, 8, 1).fill(0x6b4a10)
+      break
+    case 'structure_farm':
+      // Crop rows
+      g.rect(0, 0, SIZE, SIZE).fill(0x7a6644)
+      g.rect(2, 3, 12, 1).fill(0x44aa44)
+      g.rect(2, 7, 12, 1).fill(0x44aa44)
+      g.rect(2, 11, 12, 1).fill(0x44aa44)
+      break
+    case 'structure_wall':
+      // Thick gray wall segment
+      g.rect(1, 4, 14, 8).fill(0x888888)
+      g.rect(2, 3, 12, 1).fill(0x999999)
+      // Bricks
+      g.rect(1, 8, 7, 1).fill(0x777777)
+      g.rect(8, 6, 7, 1).fill(0x777777)
+      break
+    case 'structure_well':
+      // Stone ring with blue center
+      g.circle(8, 8, 5).fill(0x888888)
+      g.circle(8, 8, 3).fill(0x4488cc)
+      // Rim
+      g.circle(8, 8, 5).stroke({ width: 1.5, color: 0x666666 })
+      break
   }
 }
 
