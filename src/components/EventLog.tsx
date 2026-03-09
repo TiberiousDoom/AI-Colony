@@ -9,6 +9,8 @@ import type { SimulationEvent } from '../simulation/simulation-engine.ts'
 const VILLAGE_COLORS: Record<string, string> = {
   utility: '#3b82f6',
   bt: '#f97316',
+  goap: '#10b981',
+  evolutionary: '#a855f7',
 }
 
 interface EventLogProps {
