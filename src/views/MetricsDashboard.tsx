@@ -16,6 +16,7 @@ import type { VillageState } from '../simulation/competition-engine.ts'
 import type { SimulationEvent } from '../simulation/simulation-engine.ts'
 import { perCapitaProsperity } from '../utils/scoring.ts'
 import { EvolutionaryAI } from '../simulation/ai/evolutionary-ai.ts'
+import { TIMING } from '../config/game-constants.ts'
 
 const VILLAGE_COLORS: Record<string, string> = {
   utility: '#3b82f6',
@@ -54,9 +55,10 @@ export function MetricsDashboard() {
   const villageNames: Record<string, string> = {}
   for (const v of villages) villageNames[v.id] = v.name
 
-  // Build overlaid chart data (by day)
-  const maxDays = Math.max(...villages.map(v => v.history.daily.length))
-  const chartData = buildOverlaidChartData(villages, maxDays)
+  // Build overlaid chart data (snapshots every 6 hours)
+  const maxSnapshots = Math.max(...villages.map(v => v.history.daily.length))
+  const chartData = buildOverlaidChartData(villages, maxSnapshots)
+  const dayTicks = getDayTicks(maxSnapshots)
 
   return (
     <div style={{
@@ -114,7 +116,7 @@ export function MetricsDashboard() {
           <ResponsiveContainer width="100%" height={180}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="day" stroke="#64748b" fontSize={11} />
+              <XAxis dataKey="day" stroke="#64748b" fontSize={11} ticks={dayTicks} type="number" domain={['dataMin', 'dataMax']} tickFormatter={(v: number) => String(Math.round(v))} />
               <YAxis stroke="#64748b" fontSize={11} />
               <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 4 }} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -141,7 +143,7 @@ export function MetricsDashboard() {
           <ResponsiveContainer width="100%" height={180}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="day" stroke="#64748b" fontSize={11} />
+              <XAxis dataKey="day" stroke="#64748b" fontSize={11} ticks={dayTicks} type="number" domain={['dataMin', 'dataMax']} tickFormatter={(v: number) => String(Math.round(v))} />
               <YAxis stroke="#64748b" fontSize={11} />
               <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 4 }} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -204,7 +206,7 @@ export function MetricsDashboard() {
           <ResponsiveContainer width="100%" height={180}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="day" stroke="#64748b" fontSize={11} />
+              <XAxis dataKey="day" stroke="#64748b" fontSize={11} ticks={dayTicks} type="number" domain={['dataMin', 'dataMax']} tickFormatter={(v: number) => String(Math.round(v))} />
               <YAxis stroke="#64748b" fontSize={11} />
               <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 4 }} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -235,14 +237,15 @@ export function MetricsDashboard() {
   )
 }
 
-function buildOverlaidChartData(villages: VillageState[], maxDays: number) {
+function buildOverlaidChartData(villages: VillageState[], maxSnapshots: number) {
   const data: Record<string, unknown>[] = []
 
-  for (let i = 0; i < maxDays; i++) {
-    const entry: Record<string, unknown> = { day: i }
+  for (let i = 0; i < maxSnapshots; i++) {
+    const entry: Record<string, unknown> = { day: i / TIMING.SNAPSHOTS_PER_DAY }
     for (const village of villages) {
       const snap = village.history.daily[i]
       if (snap) {
+        entry.day = snap.day
         entry[`${village.id}_pop`] = snap.population
         entry[`${village.id}_food`] = snap.food
         entry[`${village.id}_wood`] = snap.wood
@@ -257,6 +260,11 @@ function buildOverlaidChartData(villages: VillageState[], maxDays: number) {
   }
 
   return data
+}
+
+function getDayTicks(maxSnapshots: number): number[] {
+  const maxDays = Math.ceil(maxSnapshots / TIMING.SNAPSHOTS_PER_DAY)
+  return Array.from({ length: maxDays + 1 }, (_, i) => i)
 }
 
 function computeActivityData(villages: VillageState[]) {

@@ -34,6 +34,8 @@ export const TICKS_PER_DAY = TIMING.TICKS_PER_DAY
 export const DAY_TICKS = TIMING.DAY_TICKS
 export const NIGHT_TICKS = TIMING.NIGHT_TICKS
 export const DAYS_PER_SEASON = TIMING.DAYS_PER_SEASON
+export const SNAPSHOTS_PER_DAY = TIMING.SNAPSHOTS_PER_DAY
+export const SNAPSHOT_INTERVAL = Math.floor(TICKS_PER_DAY / SNAPSHOTS_PER_DAY)
 
 const SEASONS: Season[] = ['spring', 'summer', 'autumn', 'winter']
 
@@ -307,8 +309,8 @@ export class SimulationEngine {
     // 9. Tick active event durations
     this.state.activeEvents = this.eventScheduler.tickEvents(this.state.activeEvents)
 
-    // 10. History snapshot on day boundary
-    if (this.state.tick % TICKS_PER_DAY === 0) {
+    // 10. History snapshot every 6 hours
+    if (this.state.tick % SNAPSHOT_INTERVAL === 0) {
       this.recordSnapshot()
 
       if (this.state.stockpile.food >= 100 &&
@@ -530,7 +532,7 @@ export class SimulationEngine {
     )
 
     this.state.history.daily.push({
-      day: this.state.dayCount,
+      day: this.state.tick / TICKS_PER_DAY,
       season: this.state.season,
       population,
       food: this.state.stockpile.food,

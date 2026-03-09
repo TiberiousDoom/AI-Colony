@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { SimulationEngine, TICKS_PER_DAY, DAY_TICKS } from '../src/simulation/simulation-engine.ts'
+import { SimulationEngine, TICKS_PER_DAY, DAY_TICKS, SNAPSHOT_INTERVAL } from '../src/simulation/simulation-engine.ts'
 import { UtilityAI } from '../src/simulation/ai/utility-ai.ts'
 import type { SimulationConfig } from '../src/simulation/simulation-engine.ts'
 
@@ -84,8 +84,9 @@ describe('SimulationEngine', () => {
       for (let i = 0; i < TICKS_PER_DAY; i++) {
         engine.tick()
       }
-      // Initial + day 1 boundary
-      expect(engine.getState().history.daily.length).toBe(2)
+      // Initial + snapshots during 1 day (every SNAPSHOT_INTERVAL ticks)
+      const expectedSnapshots = 1 + Math.floor(TICKS_PER_DAY / SNAPSHOT_INTERVAL)
+      expect(engine.getState().history.daily.length).toBe(expectedSnapshots)
     })
   })
 
@@ -200,7 +201,8 @@ describe('SimulationEngine', () => {
       const state = engine.getState()
       expect(state.tick).toBe(300)
       expect(state.dayCount).toBe(10)
-      expect(state.history.daily.length).toBe(11) // initial + 10 days
+      const expectedSnapshots = 1 + Math.floor(300 / SNAPSHOT_INTERVAL) // initial + every SNAPSHOT_INTERVAL ticks
+      expect(state.history.daily.length).toBe(expectedSnapshots)
     })
 
     it('runs 900 ticks (30 days) without crashing (may end early if all die)', () => {
