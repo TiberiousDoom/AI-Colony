@@ -14,8 +14,8 @@ const SEASON_LABELS: Record<string, string> = {
   winter: 'Winter',
 }
 
-export function TopBar({ onToggleChecklist }: { onToggleChecklist?: () => void }) {
-  const { competitionState, isRunning, speed, seed, start, pause, reset, setSpeed, setSeed, init } = useSimulationStore()
+export function TopBar({ onToggleChecklist, onToggleSaveLoad }: { onToggleChecklist?: () => void; onToggleSaveLoad?: () => void }) {
+  const { competitionState, isRunning, speed, seed, start, pause, reset, setSpeed, setSeed, init, showSetupScreen } = useSimulationStore()
 
   const handleStartPause = () => {
     if (isRunning) {
@@ -187,6 +187,40 @@ export function TopBar({ onToggleChecklist }: { onToggleChecklist?: () => void }
 
       {/* View toggle */}
       <ViewToggle />
+
+      {/* Save/Load */}
+      {onToggleSaveLoad && (
+        <button
+          onClick={onToggleSaveLoad}
+          style={{
+            padding: '4px 8px',
+            borderRadius: 4,
+            border: '1px solid #334155',
+            background: 'transparent',
+            color: '#94a3b8',
+            cursor: 'pointer',
+            fontSize: 12,
+          }}
+        >
+          Save/Load
+        </button>
+      )}
+
+      {/* New Game */}
+      <button
+        onClick={showSetupScreen}
+        style={{
+          padding: '4px 8px',
+          borderRadius: 4,
+          border: '1px solid #334155',
+          background: 'transparent',
+          color: '#94a3b8',
+          cursor: 'pointer',
+          fontSize: 12,
+        }}
+      >
+        New Game
+      </button>
 
       {/* Acceptance checklist toggle */}
       {onToggleChecklist && (

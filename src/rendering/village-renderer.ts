@@ -168,6 +168,19 @@ export class VillageRenderer {
     return this.villagerRenderer.getVillagerAt(world.x, world.y)
   }
 
+  /** Get structure at screen coordinates (for tooltip) */
+  structureHitTest(localX: number, localY: number, structures: import('../simulation/structures.ts').Structure[]): import('../simulation/structures.ts').Structure | null {
+    const world = this.camera.screenToWorld(localX, localY, this.viewportWidth, this.viewportHeight)
+    const tileX = Math.floor(world.x / TILE_SIZE)
+    const tileY = Math.floor(world.y / TILE_SIZE)
+    for (const s of structures) {
+      if (Math.abs(s.position.x - tileX) <= 0 && Math.abs(s.position.y - tileY) <= 0) {
+        return s
+      }
+    }
+    return null
+  }
+
   /** Get all villager IDs for keyboard cycling */
   getVillagerIds(): string[] {
     return this.villagerRenderer.getVillagerIds()

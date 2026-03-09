@@ -3,11 +3,13 @@
  * final stats, key moments, and export capabilities.
  */
 
+import { useState } from 'react'
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
 } from 'recharts'
 import { useSimulationStore } from '../store/simulation-store.ts'
 import { exportRunJSON, exportMetricsCSV, downloadBlob } from '../utils/export.ts'
+import { encodeConfigString } from '../config/game-config.ts'
 import type { CompetitionState, VillageState } from '../simulation/competition-engine.ts'
 import type { SimulationEvent } from '../simulation/simulation-engine.ts'
 
@@ -58,6 +60,9 @@ export function ResultsSummary() {
   const start = useSimulationStore(s => s.start)
   const setViewMode = useSimulationStore(s => s.setViewMode)
   const seed = useSimulationStore(s => s.seed)
+  const gameConfig = useSimulationStore(s => s.gameConfig)
+  const [scrubDay, setScrubDay] = useState<number | null>(null)
+  const [shareText, setShareText] = useState('')
 
   if (!compState) {
     return (
@@ -204,6 +209,7 @@ export function ResultsSummary() {
               <YAxis stroke="#475569" fontSize={11} />
               <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', fontSize: 12 }} />
               <Legend />
+              {scrubDay !== null && <ReferenceLine x={scrubDay} stroke="#f59e0b" strokeDasharray="3 3" />}
               {villages.map(v => (
                 <Line key={v.id} type="monotone" dataKey={v.id} name={v.name} stroke={getVillageColor(v.id)} dot={false} strokeWidth={2} />
               ))}
@@ -219,6 +225,7 @@ export function ResultsSummary() {
               <YAxis stroke="#475569" fontSize={11} />
               <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', fontSize: 12 }} />
               <Legend />
+              {scrubDay !== null && <ReferenceLine x={scrubDay} stroke="#f59e0b" strokeDasharray="3 3" />}
               {villages.map(v => (
                 <Line key={v.id} type="monotone" dataKey={v.id} name={v.name} stroke={getVillageColor(v.id)} dot={false} strokeWidth={2} />
               ))}
@@ -226,6 +233,39 @@ export function ResultsSummary() {
           </ResponsiveContainer>
         </div>
       </div>
+
+      {/* Timeline Scrubber */}
+      {maxDays > 1 && (
+        <div style={{ marginBottom: 24, background: '#0f172a', borderRadius: 8, padding: 16 }}>
+          <div style={{ fontSize: 13, color: '#64748b', marginBottom: 8, textTransform: 'uppercase' }}>
+            Timeline Scrubber {scrubDay !== null && `— Day ${scrubDay}`}
+          </div>
+          <input
+            type="range"
+            min={1}
+            max={maxDays}
+            value={scrubDay ?? 1}
+            onChange={e => setScrubDay(parseInt(e.target.value, 10))}
+            style={{ width: '100%', accentColor: '#3b82f6' }}
+          />
+          {scrubDay !== null && (
+            <div style={{ display: 'flex', gap: 16, marginTop: 8, flexWrap: 'wrap' }}>
+              {villages.map(v => {
+                const snap = v.history.daily[scrubDay - 1]
+                if (!snap) return null
+                return (
+                  <div key={v.id} style={{ fontSize: 12, color: getVillageColor(v.id) }}>
+                    <div style={{ fontWeight: 600 }}>{v.name}</div>
+                    <div style={{ color: '#94a3b8' }}>
+                      Pop: {snap.population} | Food: {Math.round(snap.food)} | Health: {Math.round(snap.avgHealth)} | Score: {Math.round(snap.prosperityScore)}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Key Moments */}
       <div style={{ marginBottom: 24, background: '#0f172a', borderRadius: 8, padding: 16 }}>
@@ -250,8 +290,21 @@ export function ResultsSummary() {
         <button style={btnStyle} onClick={handleNewSeed}>New Seed</button>
         <button style={btnStyle} onClick={handleExportJSON}>Export JSON</button>
         <button style={btnStyle} onClick={handleExportCSV}>Export CSV</button>
+        <button style={btnStyle} onClick={() => {
+          const str = encodeConfigString(gameConfig)
+          navigator.clipboard?.writeText(str).then(() => setShareText('Copied!'))
+            .catch(() => setShareText(str))
+          if (!navigator.clipboard) setShareText(str)
+        }}>
+          Share Config {shareText && <span style={{ color: '#4ade80', marginLeft: 4 }}>{shareText === 'Copied!' ? shareText : ''}</span>}
+        </button>
         <button style={btnStyle} onClick={() => setViewMode('metrics')}>Back to Metrics</button>
       </div>
+      {shareText && shareText !== 'Copied!' && (
+        <div style={{ textAlign: 'center', marginTop: 8, fontSize: 11, color: '#94a3b8', wordBreak: 'break-all' }}>
+          {shareText}
+        </div>
+      )}
     </div>
   )
 }

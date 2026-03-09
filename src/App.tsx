@@ -1,21 +1,82 @@
-import { useState, lazy, Suspense } from 'react'
+import { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react'
 import { TopBar } from './components/TopBar.tsx'
 import { MetricsDashboard } from './views/MetricsDashboard.tsx'
 import { AcceptanceChecklist } from './components/AcceptanceChecklist.tsx'
 import { ErrorBoundary } from './components/ErrorBoundary.tsx'
+import { EventToastContainer } from './components/EventToast.tsx'
+import { FPSCounter } from './components/FPSCounter.tsx'
+import { HelpModal } from './components/HelpModal.tsx'
+import { SaveLoadPanel } from './components/SaveLoadPanel.tsx'
 import { useSimulationStore } from './store/simulation-store.ts'
+import { useToastStore } from './store/toast-store.ts'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.ts'
 import './App.css'
 
 const SimulationView = lazy(() => import('./views/SimulationView.tsx').then(m => ({ default: m.SimulationView })))
 const ResultsSummary = lazy(() => import('./views/ResultsSummary.tsx').then(m => ({ default: m.ResultsSummary })))
+const SetupScreen = lazy(() => import('./views/SetupScreen.tsx').then(m => ({ default: m.SetupScreen })))
 
 function App() {
   const [showChecklist, setShowChecklist] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
+  const [showFPS, setShowFPS] = useState(false)
+  const [showSaveLoad, setShowSaveLoad] = useState(false)
   const viewMode = useSimulationStore(s => s.viewMode)
+  const showSetup = useSimulationStore(s => s.showSetup)
+  const competitionState = useSimulationStore(s => s.competitionState)
+
+  // Emit toasts for new global events
+  const prevEventCountRef = useRef(0)
+  const addToast = useToastStore(s => s.addToast)
+  useEffect(() => {
+    if (!competitionState) return
+    const events = competitionState.globalEvents
+    if (events.length > prevEventCountRef.current) {
+      for (let i = prevEventCountRef.current; i < events.length; i++) {
+        const evt = events[i]
+        if (evt.type === 'random_event') {
+          addToast(evt.message, 'warning')
+        } else if (evt.type === 'village_eliminated') {
+          addToast(evt.message, 'danger')
+        } else if (evt.type === 'milestone') {
+          addToast(evt.message, 'success')
+        }
+      }
+    }
+    prevEventCountRef.current = events.length
+  }, [competitionState?.globalEvents.length, addToast, competitionState])
+
+  const keyboardCallbacks = useMemo(() => ({
+    onEscape: () => {
+      setShowChecklist(false)
+      setShowHelp(false)
+      setShowSaveLoad(false)
+    },
+    onToggleHelp: () => setShowHelp(v => !v),
+    onToggleFPS: () => setShowFPS(v => !v),
+  }), [])
+  useKeyboardShortcuts(keyboardCallbacks)
+
+  if (showSetup) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0f172a', color: '#94a3b8' }}>
+            Loading...
+          </div>
+        }>
+          <SetupScreen />
+        </Suspense>
+      </ErrorBoundary>
+    )
+  }
 
   return (
     <div className="app">
-      <TopBar onToggleChecklist={() => setShowChecklist(v => !v)} />
+      <TopBar
+        onToggleChecklist={() => setShowChecklist(v => !v)}
+        onToggleSaveLoad={() => setShowSaveLoad(v => !v)}
+      />
       <ErrorBoundary>
         <main className="app-main">
           {viewMode === 'metrics' ? (
@@ -39,6 +100,10 @@ function App() {
           )}
         </main>
       </ErrorBoundary>
+      <EventToastContainer />
+      {showFPS && <FPSCounter />}
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+      {showSaveLoad && <SaveLoadPanel onClose={() => setShowSaveLoad(false)} />}
       {showChecklist && (
         <ErrorBoundary>
           <AcceptanceChecklist onClose={() => setShowChecklist(false)} />

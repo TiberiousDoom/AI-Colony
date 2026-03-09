@@ -1,46 +1,54 @@
 /**
- * ViewToggle: button to switch between metrics dashboard and simulation view.
+ * ViewToggle: buttons to switch between metrics, simulation, and results views.
  */
 
 import { useSimulationStore } from '../store/simulation-store.ts'
 
+type ViewMode = 'metrics' | 'simulation' | 'results'
+
+const MODES: { key: ViewMode; label: string }[] = [
+  { key: 'metrics', label: 'Metrics' },
+  { key: 'simulation', label: 'Sim' },
+  { key: 'results', label: 'Results' },
+]
+
 export function ViewToggle() {
   const viewMode = useSimulationStore(s => s.viewMode)
   const setViewMode = useSimulationStore(s => s.setViewMode)
+  const competitionState = useSimulationStore(s => s.competitionState)
+
+  const hasHistory = competitionState?.villages.some(v => v.history.daily.length > 0) ?? false
 
   return (
     <div data-testid="view-toggle" style={{ display: 'flex', gap: 2 }}>
-      <button
-        onClick={() => setViewMode('metrics')}
-        style={{
-          padding: '4px 10px',
-          borderRadius: '4px 0 0 4px',
-          border: '1px solid #334155',
-          background: viewMode === 'metrics' ? '#1e3a5f' : 'transparent',
-          color: viewMode === 'metrics' ? '#60a5fa' : '#64748b',
-          cursor: 'pointer',
-          fontSize: 12,
-          fontWeight: viewMode === 'metrics' ? 600 : 400,
-        }}
-      >
-        Metrics
-      </button>
-      <button
-        onClick={() => setViewMode('simulation')}
-        style={{
-          padding: '4px 10px',
-          borderRadius: '0 4px 4px 0',
-          border: '1px solid #334155',
-          borderLeft: 'none',
-          background: viewMode === 'simulation' ? '#1e3a5f' : 'transparent',
-          color: viewMode === 'simulation' ? '#60a5fa' : '#64748b',
-          cursor: 'pointer',
-          fontSize: 12,
-          fontWeight: viewMode === 'simulation' ? 600 : 400,
-        }}
-      >
-        Sim
-      </button>
+      {MODES.map((mode, i) => {
+        const isFirst = i === 0
+        const isLast = i === MODES.length - 1
+        const isActive = viewMode === mode.key
+        const isDisabled = mode.key === 'results' && !hasHistory
+
+        return (
+          <button
+            key={mode.key}
+            onClick={() => !isDisabled && setViewMode(mode.key)}
+            disabled={isDisabled}
+            style={{
+              padding: '4px 10px',
+              borderRadius: isFirst ? '4px 0 0 4px' : isLast ? '0 4px 4px 0' : '0',
+              border: '1px solid #334155',
+              borderLeft: isFirst ? '1px solid #334155' : 'none',
+              background: isActive ? '#1e3a5f' : 'transparent',
+              color: isDisabled ? '#334155' : isActive ? '#60a5fa' : '#64748b',
+              cursor: isDisabled ? 'not-allowed' : 'pointer',
+              fontSize: 12,
+              fontWeight: isActive ? 600 : 400,
+              opacity: isDisabled ? 0.5 : 1,
+            }}
+          >
+            {mode.label}
+          </button>
+        )
+      })}
     </div>
   )
 }

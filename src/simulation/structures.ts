@@ -4,6 +4,7 @@
 
 import type { Position, VillageStockpile } from './villager.ts'
 import type { World } from './world.ts'
+import { STOCKPILE, STRUCTURES as STRUCT_CONST, STRUCTURE_COSTS_MAP } from '../config/game-constants.ts'
 
 export type StructureType = 'shelter' | 'storage' | 'watchtower' | 'farm' | 'wall' | 'well'
 
@@ -19,17 +20,10 @@ export interface StructureCost {
   stone: number
 }
 
-export const STRUCTURE_COSTS: Record<StructureType, StructureCost> = {
-  shelter: { wood: 20, stone: 0 },
-  storage: { wood: 15, stone: 10 },
-  watchtower: { wood: 10, stone: 15 },
-  farm: { wood: 15, stone: 0 },
-  wall: { wood: 0, stone: 12 },
-  well: { wood: 0, stone: 20 },
-}
+export const STRUCTURE_COSTS: Record<StructureType, StructureCost> = STRUCTURE_COSTS_MAP
 
 /** Base stockpile cap per resource type (food, wood, stone) */
-export const BASE_STOCKPILE_CAP = 200
+export const BASE_STOCKPILE_CAP = STOCKPILE.BASE_CAP
 
 export function canAfford(stockpile: VillageStockpile, type: StructureType): boolean {
   const cost = STRUCTURE_COSTS[type]
@@ -57,7 +51,7 @@ export function findBuildSite(world: World, campfire: Position, structures: Stru
   // Campfire tile itself is reserved
   occupied.add(`${campfire.x},${campfire.y}`)
 
-  const radius = 5
+  const radius = STRUCT_CONST.BUILD_SITE_RADIUS
   let bestDist = Infinity
   let best: Position | null = null
 
@@ -78,11 +72,11 @@ export function findBuildSite(world: World, campfire: Position, structures: Stru
 }
 
 export function getShelterCapacity(structures: Structure[]): number {
-  return structures.filter(s => s.type === 'shelter').length * 3
+  return structures.filter(s => s.type === 'shelter').length * STRUCT_CONST.SHELTER_CAPACITY
 }
 
 export function getStorageBonus(structures: Structure[]): number {
-  return structures.filter(s => s.type === 'storage').length * 100
+  return structures.filter(s => s.type === 'storage').length * STRUCT_CONST.STORAGE_BONUS
 }
 
 export function getStockpileCap(structures: Structure[]): number {
@@ -91,12 +85,12 @@ export function getStockpileCap(structures: Structure[]): number {
 
 /** Detection range bonus per watchtower (tiles) */
 export function getWatchtowerDetectionBonus(structures: Structure[]): number {
-  return structures.filter(s => s.type === 'watchtower').length * 8
+  return structures.filter(s => s.type === 'watchtower').length * STRUCT_CONST.WATCHTOWER_DETECTION_BONUS
 }
 
 /** Food produced per farm per day (spring/summer only) */
 export function getFarmFoodProduction(structures: Structure[]): number {
-  return structures.filter(s => s.type === 'farm').length * 5
+  return structures.filter(s => s.type === 'farm').length * STRUCT_CONST.FARM_FOOD_PER_DAY
 }
 
 /** Whether the village has at least one well */

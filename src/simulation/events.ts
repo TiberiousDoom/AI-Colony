@@ -5,6 +5,7 @@
 
 import type { SeededRNG } from '../utils/seed.ts'
 import type { Position, Season } from './villager.ts'
+import { EVENTS } from '../config/game-constants.ts'
 
 export type RandomEventType = 'predator' | 'blight' | 'cold_snap' | 'illness' | 'storm' | 'resource_discovery'
 
@@ -28,20 +29,31 @@ export function resolveEventPosition(event: RandomEvent, campfire: Position): Po
   }
 }
 
+/** Progressive difficulty scaling based on day count */
+export function getDifficultyMultiplier(dayCount: number): number {
+  if (dayCount <= 15) return 1.0
+  if (dayCount <= 30) return 1.2
+  if (dayCount <= 50) return 1.5
+  return 1.8
+}
+
 export class EventScheduler {
   private rng: SeededRNG
   private daysSinceLastEvent: number = 0
+  private frequencyMultiplier: number
 
-  constructor(rng: SeededRNG) {
+  constructor(rng: SeededRNG, frequencyMultiplier: number = 1.0) {
     this.rng = rng
+    this.frequencyMultiplier = frequencyMultiplier
   }
 
   /** Check if a new event should fire this day. Returns event or null. */
   checkForEvent(dayCount: number, season: Season): RandomEvent | null {
     this.daysSinceLastEvent++
 
-    // Events fire every 5–10 days
-    const threshold = 5 + this.rng.nextInt(0, 5)
+    // Events fire every 5–10 days, scaled by frequency multiplier
+    const baseThreshold = EVENTS.MIN_INTERVAL + this.rng.nextInt(0, EVENTS.INTERVAL_VARIANCE)
+    const threshold = Math.round(baseThreshold * this.frequencyMultiplier)
     if (this.daysSinceLastEvent < threshold) return null
 
     this.daysSinceLastEvent = 0
@@ -83,51 +95,54 @@ export class EventScheduler {
   }
 
   private createPredator(dayCount: number): RandomEvent {
-    const dx = this.rng.nextInt(-8, 8)
-    const dy = this.rng.nextInt(-8, 8)
-    const severity = this.rng.nextInt(20, 40)
+    const dx = this.rng.nextInt(-EVENTS.PREDATOR_OFFSET, EVENTS.PREDATOR_OFFSET)
+    const dy = this.rng.nextInt(-EVENTS.PREDATOR_OFFSET, EVENTS.PREDATOR_OFFSET)
+    const baseSeverity = this.rng.nextInt(EVENTS.PREDATOR_SEVERITY_MIN, EVENTS.PREDATOR_SEVERITY_MAX)
+    const severity = Math.round(baseSeverity * getDifficultyMultiplier(dayCount))
     return {
       type: 'predator',
       triggerTick: dayCount,
       relativePosition: { dx, dy },
-      radius: 5,
-      durationTicks: 1, // Instant damage applied once
+      radius: EVENTS.PREDATOR_RADIUS,
+      durationTicks: EVENTS.PREDATOR_DURATION,
       severity,
     }
   }
 
   private createBlight(dayCount: number): RandomEvent {
-    const dx = this.rng.nextInt(-10, 10)
-    const dy = this.rng.nextInt(-10, 10)
+    const dx = this.rng.nextInt(-EVENTS.BLIGHT_OFFSET, EVENTS.BLIGHT_OFFSET)
+    const dy = this.rng.nextInt(-EVENTS.BLIGHT_OFFSET, EVENTS.BLIGHT_OFFSET)
     return {
       type: 'blight',
       triggerTick: dayCount,
       relativePosition: { dx, dy },
-      radius: 5,
-      durationTicks: 90, // 3 days = 90 ticks
+      radius: EVENTS.BLIGHT_RADIUS,
+      durationTicks: EVENTS.BLIGHT_DURATION,
       severity: 0,
     }
   }
 
   private createColdSnap(dayCount: number): RandomEvent {
+    const mult = getDifficultyMultiplier(dayCount)
     return {
       type: 'cold_snap',
       triggerTick: dayCount,
       relativePosition: { dx: 0, dy: 0 },
-      radius: 999, // Affects entire map
-      durationTicks: 60, // 2 days = 60 ticks
-      severity: 3, // Warmth drain rate
+      radius: EVENTS.COLD_SNAP_RADIUS,
+      durationTicks: Math.round(EVENTS.COLD_SNAP_DURATION * mult),
+      severity: EVENTS.COLD_SNAP_SEVERITY,
     }
   }
 
   createIllness(dayCount: number): RandomEvent {
+    const mult = getDifficultyMultiplier(dayCount)
     return {
       type: 'illness',
       triggerTick: dayCount,
       relativePosition: { dx: 0, dy: 0 },
-      radius: 999,
-      durationTicks: 150, // 5 days
-      severity: 2, // Drain rate multiplier
+      radius: EVENTS.COLD_SNAP_RADIUS,
+      durationTicks: Math.round(EVENTS.ILLNESS_DURATION * mult),
+      severity: EVENTS.ILLNESS_SEVERITY,
     }
   }
 
@@ -136,21 +151,21 @@ export class EventScheduler {
       type: 'storm',
       triggerTick: dayCount,
       relativePosition: { dx: 0, dy: 0 },
-      radius: 999,
-      durationTicks: 30, // 1 day
-      severity: 1.5, // Duration multiplier for outdoor actions
+      radius: EVENTS.COLD_SNAP_RADIUS,
+      durationTicks: EVENTS.STORM_DURATION,
+      severity: EVENTS.STORM_SEVERITY,
     }
   }
 
   createResourceDiscovery(dayCount: number): RandomEvent {
-    const dx = this.rng.nextInt(-6, 6)
-    const dy = this.rng.nextInt(-6, 6)
+    const dx = this.rng.nextInt(-EVENTS.RESOURCE_DISCOVERY_OFFSET, EVENTS.RESOURCE_DISCOVERY_OFFSET)
+    const dy = this.rng.nextInt(-EVENTS.RESOURCE_DISCOVERY_OFFSET, EVENTS.RESOURCE_DISCOVERY_OFFSET)
     return {
       type: 'resource_discovery',
       triggerTick: dayCount,
       relativePosition: { dx, dy },
-      radius: 3,
-      durationTicks: 1, // Instant — processed once
+      radius: EVENTS.RESOURCE_DISCOVERY_RADIUS,
+      durationTicks: EVENTS.RESOURCE_DISCOVERY_DURATION,
       severity: 0,
     }
   }

@@ -30,11 +30,12 @@ import {
   TICKS_PER_DAY, DAY_TICKS, DAYS_PER_SEASON,
   type SimulationHistory, type SimulationEvent, type SimulationEventType,
 } from './simulation-engine.ts'
+import { COMPETITION, EVENTS as EVENT_CONST, POPULATION } from '../config/game-constants.ts'
 
 const SEASONS: Season[] = ['spring', 'summer', 'autumn', 'winter']
-const VICTORY_LAP_DAYS = 10
-const STAGNATION_WINDOW = 30
-const STAGNATION_THRESHOLD = 0.05
+const VICTORY_LAP_DAYS = COMPETITION.VICTORY_LAP_DAYS
+const STAGNATION_WINDOW = COMPETITION.STAGNATION_WINDOW
+const STAGNATION_THRESHOLD = COMPETITION.STAGNATION_THRESHOLD
 
 // --- Types ---
 
@@ -51,6 +52,8 @@ export interface CompetitionConfig {
   worldHeight: number
   villages: VillageConfig[]
   timeLimit?: number
+  resourceMultiplier?: number
+  eventFrequencyMultiplier?: number
 }
 
 export interface VillageState {
@@ -95,7 +98,7 @@ export class CompetitionEngine {
 
   constructor(config: CompetitionConfig) {
     this.rng = createRNG(config.seed)
-    this.eventScheduler = new EventScheduler(this.rng.fork())
+    this.eventScheduler = new EventScheduler(this.rng.fork(), config.eventFrequencyMultiplier)
 
     const villages: VillageState[] = config.villages.map(vc => {
       const villageRng = this.rng.fork()
@@ -124,7 +127,7 @@ export class CompetitionEngine {
         name: vc.name,
         world,
         villagers,
-        stockpile: createInitialStockpile(),
+        stockpile: createInitialStockpile(config.resourceMultiplier),
         structures: [],
         aiSystem: vc.aiSystem,
         campfirePosition: world.campfirePosition,
@@ -215,7 +218,7 @@ export class CompetitionEngine {
     const c = config ?? this.state.config
     // Reconstruct everything from scratch
     this.rng = createRNG(c.seed)
-    this.eventScheduler = new EventScheduler(this.rng.fork())
+    this.eventScheduler = new EventScheduler(this.rng.fork(), c.eventFrequencyMultiplier)
     this.villageRngs.clear()
 
     const villages: VillageState[] = c.villages.map(vc => {
@@ -245,7 +248,7 @@ export class CompetitionEngine {
         name: vc.name,
         world,
         villagers,
-        stockpile: createInitialStockpile(),
+        stockpile: createInitialStockpile(c.resourceMultiplier),
         structures: [],
         aiSystem: vc.aiSystem,
         campfirePosition: world.campfirePosition,
@@ -347,7 +350,7 @@ export class CompetitionEngine {
     for (const villager of village.villagers) {
       if (!villager.alive) continue
       if (villager.path.length > 0) {
-        const steps = villager.currentAction === 'flee' ? 2 : 1
+        const steps = villager.currentAction === 'flee' ? COMPETITION.FLEE_SPEED_MULTIPLIER : 1
         for (let i = 0; i < steps && villager.path.length > 0; i++) {
           const next = villager.path.shift()!
           villager.position.x = next.x
@@ -434,8 +437,8 @@ export class CompetitionEngine {
         `${this.state.season.charAt(0).toUpperCase() + this.state.season.slice(1)} has arrived`)
     }
 
-    // Random events (grace period: no events before day 5)
-    if (this.state.dayCount >= 5) {
+    // Random events (grace period)
+    if (this.state.dayCount >= EVENT_CONST.GRACE_PERIOD_DAYS) {
       const event = this.eventScheduler.checkForEvent(this.state.dayCount, this.state.season)
       if (event) {
         this.state.activeEvents.push(event)
@@ -461,7 +464,7 @@ export class CompetitionEngine {
               const idx = event.triggerTick % alive.length
               const target = alive[idx]
               if (!target.statusEffects.some(e => e.type === 'illness')) {
-                target.statusEffects.push({ type: 'illness', ticksRemaining: 150 })
+                target.statusEffects.push({ type: 'illness', ticksRemaining: EVENT_CONST.ILLNESS_DURATION })
                 this.addVillageEvent(village, 'random_event', `${target.name} has fallen ill!`)
               }
             }
@@ -540,7 +543,7 @@ export class CompetitionEngine {
         if (event.type === 'predator') {
           const detectionBonus = getWatchtowerDetectionBonus(village.structures)
           const effectiveRadius = event.radius + detectionBonus
-          const damageReduction = hasWall(village.structures) ? 0.5 : 1.0
+          const damageReduction = hasWall(village.structures) ? EVENT_CONST.WALL_DAMAGE_REDUCTION : 1.0
 
           for (const villager of village.villagers) {
             if (!villager.alive) continue
@@ -560,7 +563,7 @@ export class CompetitionEngine {
             if (!villager.alive) continue
             const warmth = villager.needs.get(NeedType.Warmth)
             if (warmth && this.state.season !== 'winter') {
-              warmth.current -= 3
+              warmth.current -= EVENT_CONST.COLD_SNAP_SEVERITY
               clampNeed(warmth)
             }
           }
@@ -575,17 +578,17 @@ export class CompetitionEngine {
     const shelterCap = getShelterCapacity(village.structures)
     const rngs = this.villageRngs.get(village.id)!
 
-    if (village.stockpile.food > 50 && alive < shelterCap && shelterCap > 0) {
+    if (village.stockpile.food > POPULATION.GROWTH_FOOD_THRESHOLD && alive < shelterCap && shelterCap > 0) {
       village.growthTimer++
-      if (village.growthTimer >= 12) {
-        const threshold = 12 + rngs.general.nextInt(0, 3)
+      if (village.growthTimer >= POPULATION.GROWTH_TIMER_BASE) {
+        const threshold = POPULATION.GROWTH_TIMER_BASE + rngs.general.nextInt(0, POPULATION.GROWTH_TIMER_VARIANCE)
         if (village.growthTimer >= threshold) {
           const id = `villager-${village.villagers.length}`
           const name = `Villager ${village.villagers.length + 1}`
           const v = createVillager(
             id, name,
-            village.campfirePosition.x + rngs.general.nextInt(-2, 2),
-            village.campfirePosition.y + rngs.general.nextInt(-2, 2),
+            village.campfirePosition.x + rngs.general.nextInt(-POPULATION.SPAWN_OFFSET, POPULATION.SPAWN_OFFSET),
+            village.campfirePosition.y + rngs.general.nextInt(-POPULATION.SPAWN_OFFSET, POPULATION.SPAWN_OFFSET),
           )
           village.villagers.push(v)
           this.addVillageEvent(village, 'birth', `${name} has joined the village!`)
@@ -655,6 +658,27 @@ export class CompetitionEngine {
           this.addVillageEvent(village, 'stagnation_warning',
             `${village.name} prosperity stagnating (<5% change over ${STAGNATION_WINDOW} days)`)
         }
+
+        // Escalation: if stagnation persists for 2 consecutive windows (60 days), force a challenging event
+        if (daily.length >= STAGNATION_WINDOW * 2) {
+          const doubleOld = daily[daily.length - STAGNATION_WINDOW * 2]
+          if (doubleOld && doubleOld.prosperityScore > 0) {
+            const longChange = Math.abs(recent.prosperityScore - doubleOld.prosperityScore) / doubleOld.prosperityScore
+            if (longChange < STAGNATION_THRESHOLD) {
+              const alreadyForced = village.events.some(
+                e => e.type === 'random_event' && e.message.includes('stagnation breaker') && e.day >= this.state.dayCount - STAGNATION_WINDOW,
+              )
+              if (!alreadyForced) {
+                const forcedEvent = this.rng.next() < 0.5
+                  ? this.eventScheduler.createIllness(this.state.dayCount)
+                  : this.eventScheduler.createStorm(this.state.dayCount)
+                this.state.activeEvents.push(forcedEvent)
+                this.addGlobalEvent('random_event',
+                  `Forced ${forcedEvent.type} event (stagnation breaker)`)
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -709,6 +733,7 @@ export class CompetitionEngine {
       village.stockpile.food, village.stockpile.wood, village.stockpile.stone,
       village.structures.length, uniqueTypes,
       this.state.dayCount,
+      avgHunger, avgEnergy,
     )
 
     village.history.daily.push({

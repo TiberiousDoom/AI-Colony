@@ -3,6 +3,8 @@
  * Composite score reflecting village health, wealth, and longevity.
  */
 
+import { SCORING } from '../config/game-constants.ts'
+
 export function calculateProsperity(
   population: number,
   avgHealth: number,
@@ -12,15 +14,22 @@ export function calculateProsperity(
   structureCount: number,
   uniqueStructureTypes: number,
   daysSurvived: number,
+  avgHunger: number = 50,
+  avgEnergy: number = 50,
 ): number {
-  return (
-    population * 10 +
-    avgHealth * 0.5 +
-    food * 0.3 +
-    wood * 0.2 +
-    stone * 0.2 +
-    structureCount * 5 +
-    uniqueStructureTypes * 10 +
-    daysSurvived * 0.5
-  )
+  const base =
+    population * SCORING.POP_WEIGHT +
+    avgHealth * SCORING.HEALTH_WEIGHT +
+    food * SCORING.FOOD_WEIGHT +
+    wood * SCORING.WOOD_WEIGHT +
+    stone * SCORING.STONE_WEIGHT +
+    structureCount * SCORING.STRUCTURE_WEIGHT +
+    uniqueStructureTypes * SCORING.UNIQUE_TYPE_WEIGHT +
+    daysSurvived * SCORING.DAYS_WEIGHT
+
+  // Efficiency bonus: rewards well-fed, rested, healthy villages
+  const avgWellbeing = (avgHealth + avgHunger + avgEnergy) / 3
+  const efficiencyBonus = avgWellbeing * population * SCORING.EFFICIENCY_FACTOR
+
+  return base + efficiencyBonus
 }

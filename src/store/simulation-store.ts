@@ -5,11 +5,11 @@
 
 import { create } from 'zustand'
 import { CompetitionEngine, type CompetitionState, type CompetitionConfig } from '../simulation/competition-engine.ts'
-import { UtilityAI } from '../simulation/ai/utility-ai.ts'
-import { BehaviorTreeAI } from '../simulation/ai/behavior-tree-ai.ts'
-import { GOAPAI } from '../simulation/ai/goap-ai.ts'
+import {
+  type GameConfig, getDefaultGameConfig, buildCompetitionConfig,
+} from '../config/game-config.ts'
 
-const TICK_INTERVAL_MS = 1000 // 1 tick per second at 1× speed
+const TICK_INTERVAL_MS = 1000 // 1 tick per second at 1x speed
 
 interface SimulationStore {
   /** Current competition state */
@@ -22,6 +22,10 @@ interface SimulationStore {
   seed: number
   /** Current view mode */
   viewMode: 'metrics' | 'simulation' | 'results'
+  /** Game configuration */
+  gameConfig: GameConfig
+  /** Whether to show the setup screen */
+  showSetup: boolean
 
   // Actions
   init: (seed: number) => void
@@ -31,6 +35,9 @@ interface SimulationStore {
   setSpeed: (speed: number) => void
   setSeed: (seed: number) => void
   setViewMode: (mode: 'metrics' | 'simulation' | 'results') => void
+  setGameConfig: (config: GameConfig) => void
+  startWithConfig: (config: GameConfig) => void
+  showSetupScreen: () => void
 }
 
 let engine: CompetitionEngine | null = null
@@ -87,7 +94,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
         } as CompetitionState,
       })
 
-      // Auto-pause when simulation ends → switch to results view
+      // Auto-pause when simulation ends -> switch to results view
       if (newState.isOver) {
         set({ isRunning: false, viewMode: 'results' })
         stopLoop()
@@ -98,41 +105,23 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
     animFrameId = requestAnimationFrame(gameLoop)
   }
 
+  const defaultConfig = getDefaultGameConfig()
+
   return {
     competitionState: null,
     isRunning: false,
     speed: 1,
-    seed: Math.floor(Math.random() * 1000000),
+    seed: defaultConfig.seed,
     viewMode: 'metrics' as const,
+    gameConfig: defaultConfig,
+    showSetup: true,
 
     init(seed: number) {
-      const config: CompetitionConfig = {
-        seed,
-        worldWidth: 64,
-        worldHeight: 64,
-        villages: [
-          {
-            id: 'utility',
-            name: 'Utility AI',
-            aiSystem: new UtilityAI(),
-            villagerCount: 10,
-          },
-          {
-            id: 'bt',
-            name: 'Behavior Tree',
-            aiSystem: new BehaviorTreeAI(),
-            villagerCount: 10,
-          },
-          {
-            id: 'goap',
-            name: 'GOAP',
-            aiSystem: new GOAPAI(),
-            villagerCount: 10,
-          },
-        ],
-      }
+      const store = get()
+      const gc = { ...store.gameConfig, seed }
+      const config = buildCompetitionConfig(gc)
       engine = new CompetitionEngine(config)
-      set({ competitionState: { ...engine.getState() } as CompetitionState, seed })
+      set({ competitionState: { ...engine.getState() } as CompetitionState, seed, gameConfig: gc, showSetup: false })
     },
 
     start() {
@@ -173,6 +162,32 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
 
     setViewMode(mode: 'metrics' | 'simulation' | 'results') {
       set({ viewMode: mode })
+    },
+
+    setGameConfig(config: GameConfig) {
+      set({ gameConfig: config, seed: config.seed })
+    },
+
+    startWithConfig(config: GameConfig) {
+      stopLoop()
+      const competitionConfig = buildCompetitionConfig(config)
+      engine = new CompetitionEngine(competitionConfig)
+      lastTimestamp = 0
+      accumulator = 0
+      set({
+        gameConfig: config,
+        seed: config.seed,
+        competitionState: { ...engine.getState() } as CompetitionState,
+        isRunning: true,
+        showSetup: false,
+        viewMode: 'metrics',
+      })
+      animFrameId = requestAnimationFrame(gameLoop)
+    },
+
+    showSetupScreen() {
+      stopLoop()
+      set({ isRunning: false, showSetup: true })
     },
   }
 })

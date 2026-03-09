@@ -3,6 +3,7 @@
  */
 
 import type { SeededRNG } from '../utils/seed.ts'
+import { NEEDS, STOCKPILE, POPULATION } from '../config/game-constants.ts'
 
 // --- Position ---
 
@@ -108,10 +109,10 @@ const VILLAGER_NAMES = [
 
 function createDefaultNeeds(): NeedsMap {
   const needs: NeedsMap = new Map()
-  needs.set(NeedType.Hunger, { current: 75, drainRate: 2.0, min: 0, max: 100 })
-  needs.set(NeedType.Energy, { current: 75, drainRate: 1.0, min: 0, max: 100 })
-  needs.set(NeedType.Health, { current: 75, drainRate: 0, min: 0, max: 100 })
-  needs.set(NeedType.Warmth, { current: 75, drainRate: 0, min: 0, max: 100 })
+  needs.set(NeedType.Hunger, { current: NEEDS.INITIAL_VALUE, drainRate: NEEDS.HUNGER_DRAIN, min: 0, max: NEEDS.MAX_VALUE })
+  needs.set(NeedType.Energy, { current: NEEDS.INITIAL_VALUE, drainRate: NEEDS.ENERGY_DRAIN, min: 0, max: NEEDS.MAX_VALUE })
+  needs.set(NeedType.Health, { current: NEEDS.INITIAL_VALUE, drainRate: NEEDS.HEALTH_DRAIN, min: 0, max: NEEDS.MAX_VALUE })
+  needs.set(NeedType.Warmth, { current: NEEDS.INITIAL_VALUE, drainRate: NEEDS.WARMTH_DRAIN, min: 0, max: NEEDS.MAX_VALUE })
   return needs
 }
 
@@ -145,8 +146,8 @@ export function createStartingVillagers(
 
   const villagers: Villager[] = []
   for (let i = 0; i < count; i++) {
-    const offsetX = rng.nextInt(-3, 3)
-    const offsetY = rng.nextInt(-3, 3)
+    const offsetX = rng.nextInt(-POPULATION.INITIAL_SPAWN_OFFSET, POPULATION.INITIAL_SPAWN_OFFSET)
+    const offsetY = rng.nextInt(-POPULATION.INITIAL_SPAWN_OFFSET, POPULATION.INITIAL_SPAWN_OFFSET)
     villagers.push(
       createVillager(
         `villager-${i}`,
@@ -159,8 +160,12 @@ export function createStartingVillagers(
   return villagers
 }
 
-export function createInitialStockpile(): VillageStockpile {
-  return { food: 50, wood: 30, stone: 10 }
+export function createInitialStockpile(resourceMultiplier: number = 1): VillageStockpile {
+  return {
+    food: Math.round(STOCKPILE.INITIAL_FOOD * resourceMultiplier),
+    wood: Math.round(STOCKPILE.INITIAL_WOOD * resourceMultiplier),
+    stone: Math.round(STOCKPILE.INITIAL_STONE * resourceMultiplier),
+  }
 }
 
 // --- Need Helpers ---
@@ -188,32 +193,32 @@ export function tickNeeds(villager: Villager, season: Season = 'summer'): void {
   const warmth = getNeed(villager, NeedType.Warmth)
 
   // Illness doubles drain rates
-  const illnessMultiplier = villager.statusEffects.some(e => e.type === 'illness') ? 2 : 1
+  const illnessMultiplier = villager.statusEffects.some(e => e.type === 'illness') ? NEEDS.ILLNESS_MULTIPLIER : 1
 
   // Base drain
   hunger.current -= hunger.drainRate * illnessMultiplier
   energy.current -= energy.drainRate * illnessMultiplier
 
-  // Warmth drain: 3/tick in winter, 0 otherwise
+  // Warmth drain in winter
   if (season === 'winter') {
-    warmth.current -= 3 * illnessMultiplier
+    warmth.current -= NEEDS.WINTER_WARMTH_DRAIN * illnessMultiplier
   }
 
   // Starvation damage
   if (hunger.current <= 0) {
     hunger.current = 0
-    health.current -= 1.0
+    health.current -= NEEDS.STARVATION_DAMAGE
   }
 
   // Exposure damage (warmth depleted during winter)
   if (warmth.current <= 0 && season === 'winter') {
     warmth.current = 0
-    health.current -= 1.0
+    health.current -= NEEDS.EXPOSURE_DAMAGE
   }
 
   // Health recovery: only when well-fed and rested
-  if (hunger.current > 50 && energy.current > 30) {
-    health.current += 0.5
+  if (hunger.current > NEEDS.HEALTH_RECOVERY_HUNGER_THRESHOLD && energy.current > NEEDS.HEALTH_RECOVERY_ENERGY_THRESHOLD) {
+    health.current += NEEDS.HEALTH_RECOVERY
   }
 
   clampNeed(hunger)
