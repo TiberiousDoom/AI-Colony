@@ -1,9 +1,13 @@
-import { useState, useMemo, lazy, Suspense } from 'react'
+import { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react'
 import { TopBar } from './components/TopBar.tsx'
 import { MetricsDashboard } from './views/MetricsDashboard.tsx'
 import { AcceptanceChecklist } from './components/AcceptanceChecklist.tsx'
 import { ErrorBoundary } from './components/ErrorBoundary.tsx'
+import { EventToastContainer } from './components/EventToast.tsx'
+import { FPSCounter } from './components/FPSCounter.tsx'
+import { HelpModal } from './components/HelpModal.tsx'
 import { useSimulationStore } from './store/simulation-store.ts'
+import { useToastStore } from './store/toast-store.ts'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.ts'
 import './App.css'
 
@@ -13,11 +17,40 @@ const SetupScreen = lazy(() => import('./views/SetupScreen.tsx').then(m => ({ de
 
 function App() {
   const [showChecklist, setShowChecklist] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
+  const [showFPS, setShowFPS] = useState(false)
   const viewMode = useSimulationStore(s => s.viewMode)
   const showSetup = useSimulationStore(s => s.showSetup)
+  const competitionState = useSimulationStore(s => s.competitionState)
+
+  // Emit toasts for new global events
+  const prevEventCountRef = useRef(0)
+  const addToast = useToastStore(s => s.addToast)
+  useEffect(() => {
+    if (!competitionState) return
+    const events = competitionState.globalEvents
+    if (events.length > prevEventCountRef.current) {
+      for (let i = prevEventCountRef.current; i < events.length; i++) {
+        const evt = events[i]
+        if (evt.type === 'random_event') {
+          addToast(evt.message, 'warning')
+        } else if (evt.type === 'village_eliminated') {
+          addToast(evt.message, 'danger')
+        } else if (evt.type === 'milestone') {
+          addToast(evt.message, 'success')
+        }
+      }
+    }
+    prevEventCountRef.current = events.length
+  }, [competitionState?.globalEvents.length, addToast, competitionState])
 
   const keyboardCallbacks = useMemo(() => ({
-    onEscape: () => setShowChecklist(false),
+    onEscape: () => {
+      setShowChecklist(false)
+      setShowHelp(false)
+    },
+    onToggleHelp: () => setShowHelp(v => !v),
+    onToggleFPS: () => setShowFPS(v => !v),
   }), [])
   useKeyboardShortcuts(keyboardCallbacks)
 
@@ -61,6 +94,9 @@ function App() {
           )}
         </main>
       </ErrorBoundary>
+      <EventToastContainer />
+      {showFPS && <FPSCounter />}
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
       {showChecklist && (
         <ErrorBoundary>
           <AcceptanceChecklist onClose={() => setShowChecklist(false)} />

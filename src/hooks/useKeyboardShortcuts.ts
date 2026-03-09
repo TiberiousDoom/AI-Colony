@@ -20,6 +20,7 @@ const SPEED_MAP: Record<string, number> = {
 
 export function useKeyboardShortcuts(callbacks?: {
   onToggleHelp?: () => void
+  onToggleFPS?: () => void
   onEscape?: () => void
 }) {
   useEffect(() => {
@@ -57,6 +58,11 @@ export function useKeyboardShortcuts(callbacks?: {
       }
       if (lower === 'r') {
         store.setViewMode('results')
+        return
+      }
+
+      if (lower === 'f') {
+        callbacks?.onToggleFPS?.()
         return
       }
 
