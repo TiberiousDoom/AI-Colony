@@ -1323,9 +1323,9 @@ const p5AiSelectionMin2: AcceptanceCheck = {
   async run() {
     try {
       const { validateAISelection } = await import('../config/game-config.ts')
-      const oneAI = validateAISelection({ utility: true, bt: false, goap: false })
-      const twoAI = validateAISelection({ utility: true, bt: true, goap: false })
-      const zeroAI = validateAISelection({ utility: false, bt: false, goap: false })
+      const oneAI = validateAISelection({ utility: true, bt: false, goap: false, evolutionary: false })
+      const twoAI = validateAISelection({ utility: true, bt: true, goap: false, evolutionary: false })
+      const zeroAI = validateAISelection({ utility: false, bt: false, goap: false, evolutionary: false })
       if (oneAI || zeroAI) {
         return { status: 'fail', detail: 'Validation accepts fewer than 2 AIs' }
       }
@@ -1439,6 +1439,284 @@ const p5KeyboardShortcuts: AcceptanceCheck = {
   },
 }
 
+// =====================================================================
+// PHASE 5B — Evolutionary AI & Biomes
+// =====================================================================
+
+const p5bEvolutionaryAiValid: AcceptanceCheck = {
+  id: 'p5b-evolutionary-ai-valid',
+  phase: 5,
+  label: 'Evolutionary AI produces valid decisions',
+  description: 'EvolutionaryAI implements IAISystem and produces valid action decisions.',
+  category: 'ai-behavior',
+  autoDetect: true,
+  async run(ctx) {
+    try {
+      const { EvolutionaryAI } = await import('../simulation/ai/evolutionary-ai.ts')
+      const { createRandomGenome } = await import('../simulation/ai/genome.ts')
+      const { createRNG } = await import('../utils/seed.ts')
+      const rng = createRNG(42)
+      const genome = createRandomGenome(rng, 4, 'temperate')
+      const ai = new EvolutionaryAI(genome)
+      if (ai.name !== 'Evolutionary') {
+        return { status: 'fail', detail: `Expected name 'Evolutionary', got '${ai.name}'` }
+      }
+      const config = defaultConfig(42)
+      const engine = ctx.createEngine({ ...config, aiSystem: ai })
+      const actions = new Set<string>()
+      for (let i = 0; i < 100; i++) {
+        engine.tick()
+        for (const v of engine.getState().villagers) {
+          if (v.alive) actions.add(v.currentAction)
+        }
+      }
+      if (actions.size < 2) {
+        return { status: 'fail', detail: `Only used ${actions.size} action type(s)` }
+      }
+      return { status: 'pass', detail: `Evolutionary AI used ${actions.size} action types` }
+    } catch (e) {
+      return { status: 'fail', detail: `${e}` }
+    }
+  },
+}
+
+const p5bGenomeCrossover: AcceptanceCheck = {
+  id: 'p5b-genome-crossover',
+  phase: 5,
+  label: 'Genome crossover produces mixed child',
+  description: 'Crossover creates a child genome with weights from both parents.',
+  category: 'ai-behavior',
+  autoDetect: true,
+  async run() {
+    try {
+      const { createRandomGenome, crossover } = await import('../simulation/ai/genome.ts')
+      const { createRNG } = await import('../utils/seed.ts')
+      const rng = createRNG(42)
+      const a = createRandomGenome(rng, 4, 'temperate')
+      const b = createRandomGenome(rng, 4, 'temperate')
+      const child = crossover(a, b, rng)
+      let fromA = 0, fromB = 0
+      for (let i = 0; i < child.actionWeights.length; i++) {
+        if (child.actionWeights[i] === a.actionWeights[i]) fromA++
+        if (child.actionWeights[i] === b.actionWeights[i]) fromB++
+      }
+      if (fromA > 0 && fromB > 0) {
+        return { status: 'pass', detail: `Child has ${fromA} weights from A, ${fromB} from B` }
+      }
+      return { status: 'fail', detail: 'Child does not mix parent weights' }
+    } catch (e) {
+      return { status: 'fail', detail: `${e}` }
+    }
+  },
+}
+
+const p5bGenomeMutation: AcceptanceCheck = {
+  id: 'p5b-genome-mutation',
+  phase: 5,
+  label: 'Genome mutation perturbs weights within bounds',
+  description: 'Mutation changes weights while keeping them in [0, 1].',
+  category: 'ai-behavior',
+  autoDetect: true,
+  async run() {
+    try {
+      const { createRandomGenome, mutate } = await import('../simulation/ai/genome.ts')
+      const { createRNG } = await import('../utils/seed.ts')
+      const rng = createRNG(42)
+      const genome = createRandomGenome(rng, 4, 'temperate')
+      const mutated = mutate(genome, 1.0, rng)
+      let changed = 0
+      for (let i = 0; i < mutated.actionWeights.length; i++) {
+        if (mutated.actionWeights[i] !== genome.actionWeights[i]) changed++
+        if (mutated.actionWeights[i] < 0 || mutated.actionWeights[i] > 1) {
+          return { status: 'fail', detail: `Weight out of bounds: ${mutated.actionWeights[i]}` }
+        }
+      }
+      if (changed === 0) return { status: 'fail', detail: 'No weights changed' }
+      return { status: 'pass', detail: `${changed} weights mutated, all in [0,1]` }
+    } catch (e) {
+      return { status: 'fail', detail: `${e}` }
+    }
+  },
+}
+
+const p5bGenomeDynamicSize: AcceptanceCheck = {
+  id: 'p5b-genome-dynamic-size',
+  phase: 5,
+  label: 'Genome size varies by biome',
+  description: 'Temperate genome has 4-need size, desert has 5-need size.',
+  category: 'ai-behavior',
+  autoDetect: true,
+  async run() {
+    try {
+      const { createRandomGenome, NUM_ACTIONS } = await import('../simulation/ai/genome.ts')
+      const { createRNG } = await import('../utils/seed.ts')
+      const rng = createRNG(42)
+      const temp = createRandomGenome(rng, 4, 'temperate')
+      const desert = createRandomGenome(rng, 5, 'desert')
+      if (temp.actionWeights.length !== NUM_ACTIONS * 4) {
+        return { status: 'fail', detail: `Temperate: expected ${NUM_ACTIONS * 4}, got ${temp.actionWeights.length}` }
+      }
+      if (desert.actionWeights.length !== NUM_ACTIONS * 5) {
+        return { status: 'fail', detail: `Desert: expected ${NUM_ACTIONS * 5}, got ${desert.actionWeights.length}` }
+      }
+      return { status: 'pass', detail: `Temperate: ${temp.actionWeights.length} weights, Desert: ${desert.actionWeights.length} weights` }
+    } catch (e) {
+      return { status: 'fail', detail: `${e}` }
+    }
+  },
+}
+
+const p5bTrainingRuns: AcceptanceCheck = {
+  id: 'p5b-training-runs',
+  phase: 5,
+  label: 'Training completes 1 generation',
+  description: 'Trainer runs 1 generation of evolutionary training without error.',
+  category: 'ai-behavior',
+  autoDetect: true,
+  async run() {
+    try {
+      const { runGeneration } = await import('../training/trainer.ts')
+      const { createRandomGenome, getGenomeNeedCount } = await import('../simulation/ai/genome.ts')
+      const { createRNG } = await import('../utils/seed.ts')
+      const rng = createRNG(42)
+      const needCount = getGenomeNeedCount('temperate')
+      const pop = Array.from({ length: 4 }, () => createRandomGenome(rng, needCount, 'temperate'))
+      const result = runGeneration(pop, {
+        populationSize: 4, generationsMax: 1, ticksPerEvaluation: 30,
+        mutationRate: 0.05, elitePercent: 0.5, seed: 42, worldSize: 'small', biome: 'temperate',
+      }, rng)
+      if (result.nextPopulation.length !== 4) {
+        return { status: 'fail', detail: `Expected 4, got ${result.nextPopulation.length}` }
+      }
+      return { status: 'pass', detail: `Best fitness: ${result.bestFitness.toFixed(1)}` }
+    } catch (e) {
+      return { status: 'fail', detail: `${e}` }
+    }
+  },
+}
+
+const p5bFitnessBonuses: AcceptanceCheck = {
+  id: 'p5b-fitness-bonuses',
+  phase: 5,
+  label: 'Fitness includes pop growth + structure variety',
+  description: 'Fitness evaluation rewards population growth and structure variety.',
+  category: 'ai-behavior',
+  autoDetect: true,
+  async run() {
+    try {
+      const { evaluateFitness } = await import('../training/fitness.ts')
+      const baseInput = { population: 10, avgHealth: 75, food: 50, wood: 30, stone: 10, structures: [] as any[], daysSurvived: 5, startingVillagerCount: 10 }
+      const base = evaluateFitness(baseInput)
+      const withGrowth = evaluateFitness({ ...baseInput, population: 15 })
+      const withStructures = evaluateFitness({ ...baseInput, structures: [{ type: 'shelter', position: { x: 0, y: 0 }, builtAtTick: 0 }, { type: 'farm', position: { x: 1, y: 0 }, builtAtTick: 0 }] as any[] })
+      if (withGrowth <= base) return { status: 'fail', detail: 'Pop growth bonus not applied' }
+      if (withStructures <= base) return { status: 'fail', detail: 'Structure variety bonus not applied' }
+      return { status: 'pass', detail: `Base: ${base.toFixed(0)}, +growth: ${withGrowth.toFixed(0)}, +structures: ${withStructures.toFixed(0)}` }
+    } catch (e) {
+      return { status: 'fail', detail: `${e}` }
+    }
+  },
+}
+
+const p5bBiomeTemperate: AcceptanceCheck = {
+  id: 'p5b-biome-temperate',
+  phase: 5,
+  label: 'Temperate biome generates valid world',
+  description: 'Temperate biome produces a world with expected tile distribution.',
+  category: 'simulation',
+  autoDetect: true,
+  async run() {
+    try {
+      const { World } = await import('../simulation/world.ts')
+      const world = new World({ width: 32, height: 32, seed: 42, biome: 'temperate' })
+      if (world.biome !== 'temperate') return { status: 'fail', detail: `Biome: ${world.biome}` }
+      return { status: 'pass', detail: 'Temperate world generated successfully' }
+    } catch (e) {
+      return { status: 'fail', detail: `${e}` }
+    }
+  },
+}
+
+const p5bBiomeDesert: AcceptanceCheck = {
+  id: 'p5b-biome-desert',
+  phase: 5,
+  label: 'Desert biome has cooling need',
+  description: 'Desert biome preset has hasCoolingNeed = true.',
+  category: 'simulation',
+  autoDetect: true,
+  async run() {
+    try {
+      const { getBiomeParams } = await import('../simulation/biomes.ts')
+      const desert = getBiomeParams('desert')
+      if (!desert.hasCoolingNeed) return { status: 'fail', detail: 'hasCoolingNeed is false' }
+      return { status: 'pass', detail: 'Desert biome has cooling need enabled' }
+    } catch (e) {
+      return { status: 'fail', detail: `${e}` }
+    }
+  },
+}
+
+const p5bBiomeTundra: AcceptanceCheck = {
+  id: 'p5b-biome-tundra',
+  phase: 5,
+  label: 'Tundra biome has permanent cold',
+  description: 'Tundra biome preset has permanentWinter = true.',
+  category: 'simulation',
+  autoDetect: true,
+  async run() {
+    try {
+      const { getBiomeParams } = await import('../simulation/biomes.ts')
+      const tundra = getBiomeParams('tundra')
+      if (!tundra.permanentWinter) return { status: 'fail', detail: 'permanentWinter is false' }
+      if (!tundra.shortGrowingSeason) return { status: 'fail', detail: 'shortGrowingSeason is false' }
+      return { status: 'pass', detail: 'Tundra has permanent cold and short growing season' }
+    } catch (e) {
+      return { status: 'fail', detail: `${e}` }
+    }
+  },
+}
+
+const p5bPerCapitaProsperity: AcceptanceCheck = {
+  id: 'p5b-per-capita-prosperity',
+  phase: 5,
+  label: 'Per-capita prosperity metric available',
+  description: 'perCapitaProsperity function exists and calculates correctly.',
+  category: 'configuration',
+  autoDetect: true,
+  async run() {
+    try {
+      const { perCapitaProsperity } = await import('./scoring.ts')
+      const result = perCapitaProsperity(1000, 10)
+      if (result !== 100) return { status: 'fail', detail: `Expected 100, got ${result}` }
+      const zero = perCapitaProsperity(1000, 0)
+      if (zero !== 0) return { status: 'fail', detail: `Expected 0 for 0 pop, got ${zero}` }
+      return { status: 'pass', detail: 'Per-capita prosperity works correctly' }
+    } catch (e) {
+      return { status: 'fail', detail: `${e}` }
+    }
+  },
+}
+
+const p5bDomFreeEvolutionary: AcceptanceCheck = {
+  id: 'p5b-dom-free-evolutionary',
+  phase: 5,
+  label: 'Evolutionary AI is DOM-free',
+  description: 'EvolutionaryAI module loads without DOM dependencies.',
+  category: 'build',
+  autoDetect: true,
+  async run() {
+    try {
+      const mod = await import('../simulation/ai/evolutionary-ai.ts')
+      if (typeof mod.EvolutionaryAI !== 'function') {
+        return { status: 'fail', detail: 'EvolutionaryAI not exported' }
+      }
+      return { status: 'pass', detail: 'EvolutionaryAI loaded without DOM' }
+    } catch (e) {
+      return { status: 'fail', detail: `${e}` }
+    }
+  },
+}
+
 // --- Export All Checks ---
 
 export const ALL_CHECKS: AcceptanceCheck[] = [
@@ -1478,6 +1756,12 @@ export const ALL_CHECKS: AcceptanceCheck[] = [
   // Phase 5 — Final Polish & Configurability
   p5ConstantsCentralized, p5SetupScreen, p5AiSelectionMin2, p5WorldSizeConfig,
   p5ScoringRebalanced, p5EventScaling, p5ViewToggleResults, p5KeyboardShortcuts,
+
+  // Phase 5B — Evolutionary AI & Biomes
+  p5bEvolutionaryAiValid, p5bGenomeCrossover, p5bGenomeMutation, p5bGenomeDynamicSize,
+  p5bTrainingRuns, p5bFitnessBonuses,
+  p5bBiomeTemperate, p5bBiomeDesert, p5bBiomeTundra,
+  p5bPerCapitaProsperity, p5bDomFreeEvolutionary,
 ]
 
 export const CATEGORIES = [

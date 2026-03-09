@@ -6,6 +6,9 @@ import type { CompetitionConfig, VillageConfig } from '../simulation/competition
 import { UtilityAI } from '../simulation/ai/utility-ai.ts'
 import { BehaviorTreeAI } from '../simulation/ai/behavior-tree-ai.ts'
 import { GOAPAI } from '../simulation/ai/goap-ai.ts'
+import { EvolutionaryAI } from '../simulation/ai/evolutionary-ai.ts'
+import type { Genome } from '../simulation/ai/genome.ts'
+import type { BiomeType } from '../simulation/biomes.ts'
 import { POPULATION, STOCKPILE } from './game-constants.ts'
 
 export type WorldSize = 'small' | 'medium' | 'large'
@@ -15,11 +18,14 @@ export type EventFrequency = 'calm' | 'normal' | 'intense'
 export interface GameConfig {
   seed: number
   worldSize: WorldSize
-  aiSelection: { utility: boolean; bt: boolean; goap: boolean }
+  aiSelection: { utility: boolean; bt: boolean; goap: boolean; evolutionary: boolean }
   startingVillagers: 5 | 10 | 15
   startingResources: ResourceLevel
   eventFrequency: EventFrequency
   timeLimit: number | null
+  biome: BiomeType
+  /** Loaded genome for evolutionary AI (set when evo AI is selected) */
+  evolutionaryGenome?: Genome
 }
 
 export const WORLD_SIZE_MAP: Record<WorldSize, { width: number; height: number }> = {
@@ -44,16 +50,17 @@ export function getDefaultGameConfig(): GameConfig {
   return {
     seed: Math.floor(Math.random() * 1000000),
     worldSize: 'medium',
-    aiSelection: { utility: true, bt: true, goap: true },
+    aiSelection: { utility: true, bt: true, goap: true, evolutionary: false },
     startingVillagers: POPULATION.INITIAL_VILLAGERS as 10,
     startingResources: 'normal',
     eventFrequency: 'normal',
     timeLimit: null,
+    biome: 'temperate',
   }
 }
 
 export function validateAISelection(selection: GameConfig['aiSelection']): boolean {
-  const count = [selection.utility, selection.bt, selection.goap].filter(Boolean).length
+  const count = [selection.utility, selection.bt, selection.goap, selection.evolutionary].filter(Boolean).length
   return count >= 2
 }
 
@@ -85,6 +92,14 @@ export function buildCompetitionConfig(gc: GameConfig): CompetitionConfig {
       villagerCount: gc.startingVillagers,
     })
   }
+  if (gc.aiSelection.evolutionary && gc.evolutionaryGenome) {
+    villages.push({
+      id: 'evolutionary',
+      name: 'Evolutionary',
+      aiSystem: new EvolutionaryAI(gc.evolutionaryGenome),
+      villagerCount: gc.startingVillagers,
+    })
+  }
 
   return {
     seed: gc.seed,
@@ -94,6 +109,7 @@ export function buildCompetitionConfig(gc: GameConfig): CompetitionConfig {
     timeLimit: gc.timeLimit ?? undefined,
     resourceMultiplier: RESOURCE_MULTIPLIER[gc.startingResources],
     eventFrequencyMultiplier: EVENT_FREQUENCY_MULTIPLIER[gc.eventFrequency],
+    biome: gc.biome !== 'temperate' ? gc.biome : undefined,
   }
 }
 
@@ -102,6 +118,7 @@ export function encodeConfigString(gc: GameConfig): string {
     gc.aiSelection.utility && 'utility',
     gc.aiSelection.bt && 'bt',
     gc.aiSelection.goap && 'goap',
+    gc.aiSelection.evolutionary && 'evolutionary',
   ].filter(Boolean).join(',')
 
   const params = new URLSearchParams()
@@ -112,6 +129,7 @@ export function encodeConfigString(gc: GameConfig): string {
   params.set('resources', gc.startingResources)
   params.set('events', gc.eventFrequency)
   if (gc.timeLimit) params.set('limit', String(gc.timeLimit))
+  if (gc.biome !== 'temperate') params.set('biome', gc.biome)
   return params.toString()
 }
 
@@ -132,7 +150,13 @@ export function decodeConfigString(str: string): Partial<GameConfig> {
       utility: parts.includes('utility'),
       bt: parts.includes('bt'),
       goap: parts.includes('goap'),
+      evolutionary: parts.includes('evolutionary'),
     }
+  }
+
+  const biome = params.get('biome')
+  if (biome === 'temperate' || biome === 'desert' || biome === 'tundra' || biome === 'island' || biome === 'lush') {
+    result.biome = biome
   }
 
   const villagers = params.get('villagers')

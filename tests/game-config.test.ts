@@ -117,7 +117,7 @@ describe('encodeConfigString / decodeConfigString', () => {
 
     expect(decoded.seed).toBe(12345)
     expect(decoded.worldSize).toBe('small')
-    expect(decoded.aiSelection).toEqual({ utility: true, bt: false, goap: true })
+    expect(decoded.aiSelection).toEqual({ utility: true, bt: false, goap: true, evolutionary: false })
     expect(decoded.startingVillagers).toBe(15)
     expect(decoded.startingResources).toBe('abundant')
     expect(decoded.eventFrequency).toBe('calm')

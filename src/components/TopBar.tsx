@@ -130,10 +130,15 @@ export function TopBar({ onToggleChecklist, onToggleSaveLoad }: { onToggleCheckl
         ))}
       </div>
 
-      {/* Day / Time / Season */}
+      {/* Day / Time / Season / Biome */}
       {competitionState && (
         <div style={{ color: '#94a3b8', fontSize: 13 }}>
           Day {dayCount} — {timeOfDay === 'day' ? 'Daytime' : 'Night'} — {SEASON_LABELS[season] ?? season}
+          {competitionState.config.biome && competitionState.config.biome !== 'temperate' && (
+            <span style={{ color: '#a78bfa', marginLeft: 8, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 }}>
+              {competitionState.config.biome}
+            </span>
+          )}
         </div>
       )}
 

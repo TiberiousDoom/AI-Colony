@@ -33,3 +33,9 @@ export function calculateProsperity(
 
   return base + efficiencyBonus
 }
+
+/** Per-capita prosperity: efficiency metric dividing by population */
+export function perCapitaProsperity(prosperity: number, population: number): number {
+  if (population <= 0) return 0
+  return prosperity / population
+}

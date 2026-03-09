@@ -10,18 +10,23 @@ import { useSimulationStore } from '../store/simulation-store.ts'
 import { KPICard } from '../components/KPICard.tsx'
 import { EventLog } from '../components/EventLog.tsx'
 import { QuickCompare } from '../components/QuickCompare.tsx'
+import { useState } from 'react'
 import type { VillagerAction } from '../simulation/villager.ts'
 import type { VillageState } from '../simulation/competition-engine.ts'
 import type { SimulationEvent } from '../simulation/simulation-engine.ts'
+import { perCapitaProsperity } from '../utils/scoring.ts'
+import { EvolutionaryAI } from '../simulation/ai/evolutionary-ai.ts'
 
 const VILLAGE_COLORS: Record<string, string> = {
   utility: '#3b82f6',
   bt: '#f97316',
   goap: '#10b981',
+  evolutionary: '#e879f9',
 }
 
 export function MetricsDashboard() {
   const compState = useSimulationStore(s => s.competitionState)
+  const [showPerCapita, setShowPerCapita] = useState(false)
 
   if (!compState) {
     return (
@@ -86,6 +91,14 @@ export function MetricsDashboard() {
               <KPICard label="Wood" value={village.stockpile.wood} color="#a78bfa" villageColor={color} eliminated={village.isEliminated} />
               <KPICard label="Stone" value={village.stockpile.stone} color="#94a3b8" villageColor={color} eliminated={village.isEliminated} />
               <KPICard label="Health" value={latestSnap?.avgHealth ?? 0} color="#f87171" villageColor={color} eliminated={village.isEliminated} />
+              {village.aiSystem instanceof EvolutionaryAI && (() => {
+                const genome = village.aiSystem.getGenome()
+                return (
+                  <div style={{ fontSize: 10, color: '#e879f9', marginLeft: 4, alignSelf: 'center' }}>
+                    Gen {genome.generation} | Fit: {genome.fitness.toFixed(0)}
+                  </div>
+                )
+              })()}
             </div>
           )
         })}
@@ -174,8 +187,19 @@ export function MetricsDashboard() {
 
         {/* Prosperity Score Chart */}
         <div data-testid="chart-prosperity" style={{ background: '#1e293b', borderRadius: 8, padding: 16 }}>
-          <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
-            Prosperity Score
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <div style={{ fontSize: 12, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1 }}>
+              {showPerCapita ? 'Per-Capita Prosperity' : 'Prosperity Score'}
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#64748b', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={showPerCapita}
+                onChange={(e) => setShowPerCapita(e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+              Per-capita
+            </label>
           </div>
           <ResponsiveContainer width="100%" height={180}>
             <LineChart data={chartData}>
@@ -188,7 +212,7 @@ export function MetricsDashboard() {
                 <Line
                   key={v.id}
                   type="monotone"
-                  dataKey={`${v.id}_prosperity`}
+                  dataKey={showPerCapita ? `${v.id}_perCapita` : `${v.id}_prosperity`}
                   name={v.name}
                   stroke={VILLAGE_COLORS[v.id] ?? '#94a3b8'}
                   strokeWidth={2}
@@ -224,6 +248,9 @@ function buildOverlaidChartData(villages: VillageState[], maxDays: number) {
         entry[`${village.id}_wood`] = snap.wood
         entry[`${village.id}_stone`] = snap.stone
         entry[`${village.id}_prosperity`] = snap.prosperityScore
+        entry[`${village.id}_perCapita`] = snap.population > 0
+          ? Math.round(perCapitaProsperity(snap.prosperityScore, snap.population) * 10) / 10
+          : 0
       }
     }
     data.push(entry)
@@ -237,6 +264,7 @@ function computeActivityData(villages: VillageState[]) {
     'idle', 'forage', 'eat', 'rest', 'chop_wood', 'mine_stone',
     'haul', 'fish', 'flee', 'build_shelter', 'build_storage', 'warm_up',
     'build_watchtower', 'build_farm', 'build_wall', 'build_well',
+    'cool_down',
   ]
 
   return order

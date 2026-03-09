@@ -5,6 +5,7 @@
 import { createRNG, type SeededRNG } from '../utils/seed.ts'
 import { createNoise2D, fractalNoise } from '../utils/noise.ts'
 import type { Position, Season } from './villager.ts'
+import { type BiomeType, type BiomeParams, getBiomeParams } from './biomes.ts'
 
 // --- Tile Types ---
 
@@ -36,6 +37,7 @@ export interface WorldConfig {
   width: number
   height: number
   seed: number
+  biome?: BiomeType
 }
 
 // --- World ---
@@ -46,6 +48,7 @@ export class World {
   readonly tiles: Tile[][]
   readonly seed: number
   readonly campfirePosition: Position
+  readonly biome: BiomeType
 
   /** Blighted tiles: "x,y" → ticks remaining until recovery */
   blightTiles: Map<string, number> = new Map()
@@ -57,14 +60,17 @@ export class World {
     this.width = config.width
     this.height = config.height
     this.seed = config.seed
+    this.biome = config.biome ?? 'temperate'
 
     const rng = createRNG(config.seed)
     const worldRng = rng.fork()
+    const biomeParams = config.biome ? getBiomeParams(config.biome) : undefined
 
     const { tiles, campfire } = generateWorld(
       this.width,
       this.height,
       worldRng,
+      biomeParams,
     )
     this.tiles = tiles
     this.campfirePosition = campfire
@@ -179,6 +185,17 @@ export class World {
     return false
   }
 
+  /** Check if all tiles of a given type have been fully depleted */
+  isResourceExhausted(type: TileType): boolean {
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        const tile = this.tiles[y][x]
+        if (tile.type === type && tile.resourceAmount > 0) return false
+      }
+    }
+    return true
+  }
+
   /** Apply blight: destroy resources in radius, set recovery timer */
   applyBlight(cx: number, cy: number, radius: number, durationTicks: number): void {
     const minX = Math.max(0, cx - radius)
@@ -205,20 +222,36 @@ function generateWorld(
   width: number,
   height: number,
   rng: SeededRNG,
+  biome?: BiomeParams,
 ): { tiles: Tile[][]; campfire: Position } {
   const noiseRng = rng.fork()
   const noise = createNoise2D(noiseRng)
 
-  const scale = 0.08
+  const scale = biome?.noiseScale ?? 0.08
 
   const tiles: Tile[][] = []
+
+  // For island biome: second noise layer for water channels
+  let noise2: ((x: number, y: number) => number) | null = null
+  if (biome && biome.name === 'Island Archipelago') {
+    const noise2Rng = rng.fork()
+    noise2 = createNoise2D(noise2Rng)
+  }
 
   for (let y = 0; y < height; y++) {
     const row: Tile[] = []
     for (let x = 0; x < width; x++) {
       const n = fractalNoise(noise, x * scale, y * scale, 4, 0.5, 2.0)
-      const type = classifyTile(n)
-      row.push(createTile(type, x, y))
+      let finalNoise = n
+
+      // Island biome: overlay water channels
+      if (noise2) {
+        const n2 = fractalNoise(noise2, x * 0.12, y * 0.12, 3, 0.5, 2.0)
+        if (n2 < -0.15) finalNoise = -1.0 // Force water channels
+      }
+
+      const type = classifyTileBiome(finalNoise, biome)
+      row.push(createTileBiome(type, x, y, biome, rng))
     }
     tiles.push(row)
   }
@@ -231,19 +264,20 @@ function generateWorld(
       const tx = cx + dx
       const ty = cy + dy
       if (tx >= 0 && tx < width && ty >= 0 && ty < height) {
-        tiles[ty][tx] = createTile(TileType.Grass, tx, ty)
+        tiles[ty][tx] = createTileBiome(TileType.Grass, tx, ty, biome, rng)
       }
     }
   }
 
   // Scatter fertile soil near water (secondary pass)
   const fertileRng = rng.fork()
+  const fertileChance = biome?.fertileChance ?? 0.4
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       if (tiles[y][x].type !== TileType.Grass) continue
       if (!hasAdjacentType(tiles, x, y, width, height, TileType.Water)) continue
-      if (fertileRng.next() < 0.4) {
-        tiles[y][x] = createTile(TileType.FertileSoil, x, y)
+      if (fertileRng.next() < fertileChance) {
+        tiles[y][x] = createTileBiome(TileType.FertileSoil, x, y, biome, rng)
       }
     }
   }
@@ -262,12 +296,39 @@ function classifyTile(noiseValue: number): TileType {
   return TileType.Stone
 }
 
+function classifyTileBiome(noiseValue: number, biome?: BiomeParams): TileType {
+  if (!biome) return classifyTile(noiseValue)
+  if (noiseValue < biome.waterThreshold) return TileType.Water
+  if (noiseValue >= biome.stoneThreshold) return TileType.Stone
+  if (noiseValue >= biome.forestThreshold[0] && noiseValue < biome.forestThreshold[1]) return TileType.Forest
+  return TileType.Grass
+}
+
 function createTile(type: TileType, x: number, y: number): Tile {
   switch (type) {
     case TileType.Forest:
       return { type, x, y, resourceAmount: 100, maxResource: 100, regenRate: 0.5 }
     case TileType.Stone:
       return { type, x, y, resourceAmount: 100, maxResource: 100, regenRate: 0 }
+    default:
+      return { type, x, y, resourceAmount: 0, maxResource: 0, regenRate: 0 }
+  }
+}
+
+function createTileBiome(type: TileType, x: number, y: number, biome?: BiomeParams, rng?: SeededRNG): Tile {
+  if (!biome) return createTile(type, x, y)
+  const regenMult = biome.regenMultiplier
+  switch (type) {
+    case TileType.Forest: {
+      const [min, max] = biome.forestResourceRange
+      const amount = rng ? rng.nextInt(min, max) : Math.round((min + max) / 2)
+      return { type, x, y, resourceAmount: amount, maxResource: amount, regenRate: 0.5 * regenMult }
+    }
+    case TileType.Stone: {
+      const [min, max] = biome.stoneResourceRange
+      const amount = rng ? rng.nextInt(min, max) : Math.round((min + max) / 2)
+      return { type, x, y, resourceAmount: amount, maxResource: amount, regenRate: 0 }
+    }
     default:
       return { type, x, y, resourceAmount: 0, maxResource: 0, regenRate: 0 }
   }
