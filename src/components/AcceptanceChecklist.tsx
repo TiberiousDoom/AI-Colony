@@ -23,6 +23,7 @@ const PHASE_LABELS: Record<Phase, string> = {
   2: 'Phase 2 — Competition & Advanced Systems',
   3: 'Phase 3 — Visual Rendering',
   4: 'Phase 4 — GOAP AI & Content',
+  5: 'Phase 5 — Final Polish & Configurability',
 }
 
 const PHASE_COLORS: Record<Phase, string> = {
@@ -30,6 +31,7 @@ const PHASE_COLORS: Record<Phase, string> = {
   2: '#8b5cf6',
   3: '#f59e0b',
   4: '#10b981',
+  5: '#ec4899',
 }
 
 export function AcceptanceChecklist({ onClose }: { onClose: () => void }) {
@@ -173,7 +175,7 @@ export function AcceptanceChecklist({ onClose }: { onClose: () => void }) {
         borderBottom: '1px solid #334155',
         flexShrink: 0,
       }}>
-        {(['all', 1, 2, 3] as const).map(phase => {
+        {(['all', 1, 2, 3, 4, 5] as const).map(phase => {
           const isActive = activePhase === phase
           const label = phase === 'all' ? 'All' : `P${phase}`
           const phaseChecks = phase === 'all' ? ALL_CHECKS : ALL_CHECKS.filter(c => c.phase === phase)
@@ -204,7 +206,7 @@ export function AcceptanceChecklist({ onClose }: { onClose: () => void }) {
 
       {/* Check list */}
       <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
-        {([1, 2, 3] as const)
+        {([1, 2, 3, 4, 5] as const)
           .filter(phase => activePhase === 'all' || activePhase === phase)
           .map(phase => {
             const phaseChecks = filteredChecks.filter(c => c.phase === phase)

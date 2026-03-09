@@ -6,6 +6,7 @@ import { ErrorBoundary } from './components/ErrorBoundary.tsx'
 import { EventToastContainer } from './components/EventToast.tsx'
 import { FPSCounter } from './components/FPSCounter.tsx'
 import { HelpModal } from './components/HelpModal.tsx'
+import { SaveLoadPanel } from './components/SaveLoadPanel.tsx'
 import { useSimulationStore } from './store/simulation-store.ts'
 import { useToastStore } from './store/toast-store.ts'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.ts'
@@ -19,6 +20,7 @@ function App() {
   const [showChecklist, setShowChecklist] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [showFPS, setShowFPS] = useState(false)
+  const [showSaveLoad, setShowSaveLoad] = useState(false)
   const viewMode = useSimulationStore(s => s.viewMode)
   const showSetup = useSimulationStore(s => s.showSetup)
   const competitionState = useSimulationStore(s => s.competitionState)
@@ -48,6 +50,7 @@ function App() {
     onEscape: () => {
       setShowChecklist(false)
       setShowHelp(false)
+      setShowSaveLoad(false)
     },
     onToggleHelp: () => setShowHelp(v => !v),
     onToggleFPS: () => setShowFPS(v => !v),
@@ -70,7 +73,10 @@ function App() {
 
   return (
     <div className="app">
-      <TopBar onToggleChecklist={() => setShowChecklist(v => !v)} />
+      <TopBar
+        onToggleChecklist={() => setShowChecklist(v => !v)}
+        onToggleSaveLoad={() => setShowSaveLoad(v => !v)}
+      />
       <ErrorBoundary>
         <main className="app-main">
           {viewMode === 'metrics' ? (
@@ -97,6 +103,7 @@ function App() {
       <EventToastContainer />
       {showFPS && <FPSCounter />}
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+      {showSaveLoad && <SaveLoadPanel onClose={() => setShowSaveLoad(false)} />}
       {showChecklist && (
         <ErrorBoundary>
           <AcceptanceChecklist onClose={() => setShowChecklist(false)} />

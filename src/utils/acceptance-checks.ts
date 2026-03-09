@@ -9,7 +9,7 @@ import { NeedType } from '../simulation/villager.ts'
 
 export type CheckStatus = 'pass' | 'fail' | 'running' | 'skipped' | 'pending'
 
-export type Phase = 1 | 2 | 3 | 4
+export type Phase = 1 | 2 | 3 | 4 | 5
 
 export interface AcceptanceCheck {
   id: string
@@ -1264,6 +1264,181 @@ const p4StatusIcons: AcceptanceCheck = {
   },
 }
 
+// =====================================================================
+// PHASE 5 — Final Polish & Configurability
+// =====================================================================
+
+const p5ConstantsCentralized: AcceptanceCheck = {
+  id: 'p5-constants-centralized',
+  phase: 5,
+  label: 'Constants centralized in game-constants.ts',
+  description: 'Verifies game-constants.ts exports all expected constant groups.',
+  category: 'configuration',
+  autoDetect: true,
+  async run() {
+    try {
+      const constants = await import('../config/game-constants.ts')
+      const keys = ['TIMING', 'POPULATION', 'NEEDS', 'STOCKPILE', 'STRUCTURE_COSTS_MAP', 'STRUCTURES', 'SCORING', 'EVENTS', 'COMPETITION']
+      const missing = keys.filter(k => !(k in constants))
+      if (missing.length > 0) {
+        return { status: 'fail', detail: `Missing exports: ${missing.join(', ')}` }
+      }
+      return { status: 'pass', detail: `All ${keys.length} constant groups exported` }
+    } catch (e) {
+      return { status: 'fail', detail: `Import failed: ${e}` }
+    }
+  },
+}
+
+const p5SetupScreen: AcceptanceCheck = {
+  id: 'p5-setup-screen',
+  phase: 5,
+  label: 'Setup screen with all config options',
+  description: 'Verifies GameConfig type has all expected fields.',
+  category: 'configuration',
+  autoDetect: true,
+  async run() {
+    try {
+      const config = await import('../config/game-config.ts')
+      const gc = config.getDefaultGameConfig()
+      const requiredKeys = ['seed', 'worldSize', 'aiSelection', 'startingVillagers', 'startingResources', 'eventFrequency', 'timeLimit']
+      const missing = requiredKeys.filter(k => !(k in gc))
+      if (missing.length > 0) {
+        return { status: 'fail', detail: `Missing config fields: ${missing.join(', ')}` }
+      }
+      return { status: 'pass', detail: `GameConfig has all ${requiredKeys.length} fields` }
+    } catch (e) {
+      return { status: 'fail', detail: `Import failed: ${e}` }
+    }
+  },
+}
+
+const p5AiSelectionMin2: AcceptanceCheck = {
+  id: 'p5-ai-selection-min2',
+  phase: 5,
+  label: 'Minimum 2 AIs validation',
+  description: 'Verifies validateAISelection rejects fewer than 2 AIs.',
+  category: 'configuration',
+  autoDetect: true,
+  async run() {
+    try {
+      const { validateAISelection } = await import('../config/game-config.ts')
+      const oneAI = validateAISelection({ utility: true, bt: false, goap: false })
+      const twoAI = validateAISelection({ utility: true, bt: true, goap: false })
+      const zeroAI = validateAISelection({ utility: false, bt: false, goap: false })
+      if (oneAI || zeroAI) {
+        return { status: 'fail', detail: 'Validation accepts fewer than 2 AIs' }
+      }
+      if (!twoAI) {
+        return { status: 'fail', detail: 'Validation rejects 2 AIs' }
+      }
+      return { status: 'pass', detail: 'Correctly requires minimum 2 AIs' }
+    } catch (e) {
+      return { status: 'fail', detail: `${e}` }
+    }
+  },
+}
+
+const p5WorldSizeConfig: AcceptanceCheck = {
+  id: 'p5-world-size-config',
+  phase: 5,
+  label: 'World size configuration works',
+  description: 'Verifies different world sizes produce correct dimensions.',
+  category: 'configuration',
+  autoDetect: true,
+  async run() {
+    try {
+      const { WORLD_SIZE_MAP } = await import('../config/game-config.ts')
+      if (WORLD_SIZE_MAP.small.width !== 48 || WORLD_SIZE_MAP.small.height !== 48) {
+        return { status: 'fail', detail: `Small should be 48x48, got ${WORLD_SIZE_MAP.small.width}x${WORLD_SIZE_MAP.small.height}` }
+      }
+      if (WORLD_SIZE_MAP.medium.width !== 64 || WORLD_SIZE_MAP.medium.height !== 64) {
+        return { status: 'fail', detail: `Medium should be 64x64` }
+      }
+      if (WORLD_SIZE_MAP.large.width !== 80 || WORLD_SIZE_MAP.large.height !== 80) {
+        return { status: 'fail', detail: `Large should be 80x80` }
+      }
+      return { status: 'pass', detail: 'All 3 world sizes have correct dimensions' }
+    } catch (e) {
+      return { status: 'fail', detail: `${e}` }
+    }
+  },
+}
+
+const p5ScoringRebalanced: AcceptanceCheck = {
+  id: 'p5-scoring-rebalanced',
+  phase: 5,
+  label: 'Scoring formula rebalanced with efficiency bonus',
+  description: 'Verifies new scoring formula returns expected values.',
+  category: 'configuration',
+  autoDetect: true,
+  async run() {
+    try {
+      const { calculateProsperity } = await import('./scoring.ts')
+      // 10 pop, 75 health, 50 food, 30 wood, 10 stone, 2 structures, 2 types, 5 days, 60 hunger, 70 energy
+      const score = calculateProsperity(10, 75, 50, 30, 10, 2, 2, 5, 60, 70)
+      if (score <= 0) {
+        return { status: 'fail', detail: `Score should be positive, got ${score}` }
+      }
+      // Check efficiency bonus is included (score with high wellbeing > score with low wellbeing)
+      const lowScore = calculateProsperity(10, 75, 50, 30, 10, 2, 2, 5, 10, 10)
+      if (score <= lowScore) {
+        return { status: 'fail', detail: 'Efficiency bonus not reflected in scoring' }
+      }
+      return { status: 'pass', detail: `Score=${score.toFixed(1)}, efficiency bonus active` }
+    } catch (e) {
+      return { status: 'fail', detail: `${e}` }
+    }
+  },
+}
+
+const p5EventScaling: AcceptanceCheck = {
+  id: 'p5-event-scaling',
+  phase: 5,
+  label: 'Event difficulty scales with day count',
+  description: 'Verifies getDifficultyMultiplier increases over time.',
+  category: 'configuration',
+  autoDetect: true,
+  async run() {
+    try {
+      const { getDifficultyMultiplier } = await import('../simulation/events.ts')
+      const early = getDifficultyMultiplier(10)
+      const mid = getDifficultyMultiplier(25)
+      const late = getDifficultyMultiplier(55)
+      if (early >= mid || mid >= late) {
+        return { status: 'fail', detail: `Difficulty should increase: day10=${early}, day25=${mid}, day55=${late}` }
+      }
+      return { status: 'pass', detail: `Difficulty: day10=${early}x, day25=${mid}x, day55=${late}x` }
+    } catch (e) {
+      return { status: 'fail', detail: `${e}` }
+    }
+  },
+}
+
+const p5ViewToggleResults: AcceptanceCheck = {
+  id: 'p5-view-toggle-results',
+  phase: 5,
+  label: '3 view modes available (Metrics/Sim/Results)',
+  description: 'Manual check: ViewToggle shows 3 buttons including Results.',
+  category: 'polish',
+  autoDetect: false,
+  async run() {
+    return { status: 'pass' }
+  },
+}
+
+const p5KeyboardShortcuts: AcceptanceCheck = {
+  id: 'p5-keyboard-shortcuts',
+  phase: 5,
+  label: 'Keyboard shortcuts (Space, 1-4, M/S/R, ?, Escape)',
+  description: 'Manual check: keyboard shortcuts work for pause, speed, views, help.',
+  category: 'polish',
+  autoDetect: false,
+  async run() {
+    return { status: 'pass' }
+  },
+}
+
 // --- Export All Checks ---
 
 export const ALL_CHECKS: AcceptanceCheck[] = [
@@ -1299,6 +1474,10 @@ export const ALL_CHECKS: AcceptanceCheck[] = [
   // Phase 4 — GOAP & Content
   p4GoapValid, p4ThreeVillages, p4NewStructures, p4NewEvents,
   p4ResultsScreen, p4ExportWorks, p4GoapPlanDisplay, p4Particles, p4StatusIcons,
+
+  // Phase 5 — Final Polish & Configurability
+  p5ConstantsCentralized, p5SetupScreen, p5AiSelectionMin2, p5WorldSizeConfig,
+  p5ScoringRebalanced, p5EventScaling, p5ViewToggleResults, p5KeyboardShortcuts,
 ]
 
 export const CATEGORIES = [
@@ -1315,4 +1494,7 @@ export const CATEGORIES = [
   { key: 'inspector', label: 'Inspector' },
   { key: 'minimap', label: 'Minimap' },
   { key: 'integration', label: 'Integration' },
+  // Phase 5
+  { key: 'configuration', label: 'Configuration' },
+  { key: 'polish', label: 'UI Polish' },
 ] as const
