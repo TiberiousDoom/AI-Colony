@@ -7,6 +7,7 @@ import type { Villager, VillagerAction, VillageStockpile, Position, Season } fro
 import { getNeed, NeedType, clampNeed } from './villager.ts'
 import type { World } from './world.ts'
 import { TileType } from './world.ts'
+import { STRUCTURE_COSTS, type StructureType } from './structures.ts'
 
 export type TimeOfDay = 'day' | 'night'
 export type { Season } from './villager.ts'
@@ -21,6 +22,8 @@ export interface TickContext {
   timeOfDay: TimeOfDay
   season: Season
   structures: StructureLike[]
+  /** Whether a storm event is currently active */
+  isStorm?: boolean
 }
 
 /** Default TickContext for backward compatibility */
@@ -40,7 +43,7 @@ export interface ActionDefinition {
   complete(villager: Villager, world: World, stockpile: VillageStockpile, rng: SeededRNG, campfire: Position, ctx: TickContext): void
 }
 
-/** Whether this action is an outdoor action affected by night/winter penalties */
+/** Whether this action is an outdoor action affected by night/winter/storm penalties */
 function isOutdoor(type: VillagerAction): boolean {
   return type === 'forage' || type === 'chop_wood' || type === 'fish' || type === 'mine_stone'
 }
@@ -66,6 +69,7 @@ function makeAction(
       let mult = 1
       if (ctx.timeOfDay === 'night') mult *= 1.5
       if (ctx.season === 'winter') mult *= 1.5
+      if (ctx.isStorm) mult *= 1.5
       return Math.ceil(duration * mult)
     },
     canPerform,
@@ -208,8 +212,9 @@ export const HAUL_ACTION = makeAction(
 
 export const FISH_ACTION = makeAction(
   'fish', 4, 1,
-  (v, world) => {
-    return isAdjacentToType(v.position.x, v.position.y, world, TileType.Water)
+  (v, world, _s, _c, ctx) => {
+    return isAdjacentToType(v.position.x, v.position.y, world, TileType.Water) ||
+      isAtStructureType(v.position, ctx.structures, 'well')
   },
   (v, _w, _s, rng) => {
     // Fish yield is NOT affected by seasonal modifiers — critical winter survival resource
@@ -302,6 +307,81 @@ export const FLEE_ACTION = makeAction(
   () => { /* Movement handled by engine — no resource yield */ },
 )
 
+function canAffordStructure(stockpile: VillageStockpile, type: StructureType): boolean {
+  const cost = STRUCTURE_COSTS[type]
+  return stockpile.wood >= cost.wood && stockpile.stone >= cost.stone
+}
+
+function deductStructureCost(stockpile: VillageStockpile, type: StructureType): void {
+  const cost = STRUCTURE_COSTS[type]
+  stockpile.wood -= cost.wood
+  stockpile.stone -= cost.stone
+}
+
+export const BUILD_WATCHTOWER_ACTION = makeAction(
+  'build_watchtower', 8, 2,
+  (v, _w, stockpile, campfire) => {
+    if (!canAffordStructure(stockpile, 'watchtower')) return false
+    return isAtOrAdjacent(v.position.x, v.position.y, campfire.x, campfire.y)
+  },
+  (v, _w, stockpile) => {
+    if (!canAffordStructure(stockpile, 'watchtower')) return
+    deductStructureCost(stockpile, 'watchtower')
+    ;(v as Villager & { _builtStructure?: { type: string; position: Position } })._builtStructure = {
+      type: 'watchtower',
+      position: { ...v.position },
+    }
+  },
+)
+
+export const BUILD_FARM_ACTION = makeAction(
+  'build_farm', 6, 2,
+  (v, world, stockpile) => {
+    if (!canAffordStructure(stockpile, 'farm')) return false
+    return isAdjacentToType(v.position.x, v.position.y, world, TileType.FertileSoil)
+  },
+  (v, _w, stockpile) => {
+    if (!canAffordStructure(stockpile, 'farm')) return
+    deductStructureCost(stockpile, 'farm')
+    ;(v as Villager & { _builtStructure?: { type: string; position: Position } })._builtStructure = {
+      type: 'farm',
+      position: { ...v.position },
+    }
+  },
+)
+
+export const BUILD_WALL_ACTION = makeAction(
+  'build_wall', 4, 2,
+  (v, _w, stockpile, campfire) => {
+    if (!canAffordStructure(stockpile, 'wall')) return false
+    return isAtOrAdjacent(v.position.x, v.position.y, campfire.x, campfire.y)
+  },
+  (v, _w, stockpile) => {
+    if (!canAffordStructure(stockpile, 'wall')) return
+    deductStructureCost(stockpile, 'wall')
+    ;(v as Villager & { _builtStructure?: { type: string; position: Position } })._builtStructure = {
+      type: 'wall',
+      position: { ...v.position },
+    }
+  },
+)
+
+export const BUILD_WELL_ACTION = makeAction(
+  'build_well', 8, 2,
+  (v, _w, stockpile, campfire) => {
+    if (!canAffordStructure(stockpile, 'well')) return false
+    return isAtOrAdjacent(v.position.x, v.position.y, campfire.x, campfire.y)
+  },
+  (v, _w, stockpile) => {
+    if (!canAffordStructure(stockpile, 'well')) return
+    deductStructureCost(stockpile, 'well')
+    ;(v as Villager & { _builtStructure?: { type: string; position: Position } })._builtStructure = {
+      type: 'well',
+      position: { ...v.position },
+    }
+  },
+)
+
 // --- Action Registry ---
 
 const ACTION_MAP = new Map<VillagerAction, ActionDefinition>([
@@ -317,6 +397,10 @@ const ACTION_MAP = new Map<VillagerAction, ActionDefinition>([
   ['build_storage', BUILD_STORAGE_ACTION],
   ['warm_up', WARM_UP_ACTION],
   ['flee', FLEE_ACTION],
+  ['build_watchtower', BUILD_WATCHTOWER_ACTION],
+  ['build_farm', BUILD_FARM_ACTION],
+  ['build_wall', BUILD_WALL_ACTION],
+  ['build_well', BUILD_WELL_ACTION],
 ])
 
 export function getActionDefinition(action: VillagerAction): ActionDefinition | undefined {

@@ -7,6 +7,7 @@ import { useSimulationStore } from './store/simulation-store.ts'
 import './App.css'
 
 const SimulationView = lazy(() => import('./views/SimulationView.tsx').then(m => ({ default: m.SimulationView })))
+const ResultsSummary = lazy(() => import('./views/ResultsSummary.tsx').then(m => ({ default: m.ResultsSummary })))
 
 function App() {
   const [showChecklist, setShowChecklist] = useState(false)
@@ -19,6 +20,14 @@ function App() {
         <main className="app-main">
           {viewMode === 'metrics' ? (
             <MetricsDashboard />
+          ) : viewMode === 'results' ? (
+            <Suspense fallback={
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8' }}>
+                Loading results...
+              </div>
+            }>
+              <ResultsSummary />
+            </Suspense>
           ) : (
             <Suspense fallback={
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8' }}>

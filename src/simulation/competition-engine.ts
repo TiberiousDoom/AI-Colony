@@ -24,7 +24,7 @@ import {
 import { type TimeOfDay, type TickContext, getActionDefinition } from './actions.ts'
 import type { IAISystem, AIWorldView } from './ai/ai-interface.ts'
 import type { Structure } from './structures.ts'
-import { getStockpileCap, getShelterCapacity, createStructure } from './structures.ts'
+import { type StructureType, getStockpileCap, getShelterCapacity, createStructure, getFarmFoodProduction, getWatchtowerDetectionBonus, hasWall } from './structures.ts'
 import { EventScheduler, type RandomEvent, resolveEventPosition } from './events.ts'
 import {
   TICKS_PER_DAY, DAY_TICKS, DAYS_PER_SEASON,
@@ -280,12 +280,23 @@ export class CompetitionEngine {
   }
 
   private tickVillage(village: VillageState): void {
+    const isStorm = this.state.activeEvents.some(e => e.type === 'storm')
     const ctx: TickContext = {
       timeOfDay: this.state.timeOfDay,
       season: this.state.season,
       structures: village.structures,
+      isStorm,
     }
     const rngs = this.villageRngs.get(village.id)!
+
+    // Tick status effects
+    for (const villager of village.villagers) {
+      if (!villager.alive) continue
+      villager.statusEffects = villager.statusEffects.filter(e => {
+        e.ticksRemaining--
+        return e.ticksRemaining > 0
+      })
+    }
 
     // Needs drain
     for (const villager of village.villagers) {
@@ -317,7 +328,7 @@ export class CompetitionEngine {
             const built = (villager as Villager & { _builtStructure?: { type: string; position: Position } })._builtStructure
             if (built) {
               const structure = createStructure(
-                built.type as 'shelter' | 'storage',
+                built.type as StructureType,
                 built.position, this.state.tick,
               )
               village.structures.push(structure)
@@ -365,7 +376,7 @@ export class CompetitionEngine {
       if (villager.path.length > 0) continue
 
       const decision = village.aiSystem.decide(villager, worldView, rngs.ai)
-      villager.lastDecision = { reason: decision.reason, scores: decision.scores }
+      villager.lastDecision = { reason: decision.reason, scores: decision.scores, goapPlan: decision.goapPlan }
       const actionDef = getActionDefinition(decision.action)
 
       if (actionDef && actionDef.canPerform(villager, village.world, village.stockpile, village.campfirePosition, ctx)) {
@@ -440,6 +451,50 @@ export class CompetitionEngine {
             village.world.applyBlight(pos.x, pos.y, event.radius, event.durationTicks)
           }
         }
+
+        // Illness: infect one villager per village (use deterministic index for fairness)
+        if (event.type === 'illness') {
+          for (const village of this.state.villages) {
+            if (village.isEliminated) continue
+            const alive = village.villagers.filter(v => v.alive)
+            if (alive.length > 0) {
+              const idx = event.triggerTick % alive.length
+              const target = alive[idx]
+              if (!target.statusEffects.some(e => e.type === 'illness')) {
+                target.statusEffects.push({ type: 'illness', ticksRemaining: 150 })
+                this.addVillageEvent(village, 'random_event', `${target.name} has fallen ill!`)
+              }
+            }
+          }
+        }
+
+        // Resource discovery: spawn new resource tile near campfire
+        if (event.type === 'resource_discovery') {
+          const rngs0 = this.villageRngs.values().next().value!
+          const isForest = rngs0.general.next() < 0.5
+          for (const village of this.state.villages) {
+            if (village.isEliminated) continue
+            const pos = resolveEventPosition(event, village.campfirePosition)
+            // Find a nearby grass tile to convert
+            const converted = village.world.convertNearbyGrassTile(pos.x, pos.y, isForest ? 'forest' : 'stone')
+            if (converted) {
+              this.addVillageEvent(village, 'random_event',
+                `New ${isForest ? 'forest' : 'stone'} discovered nearby!`)
+            }
+          }
+        }
+      }
+    }
+
+    // Farm food production (spring/summer only)
+    if (this.state.season === 'spring' || this.state.season === 'summer') {
+      for (const village of this.state.villages) {
+        if (village.isEliminated) continue
+        const farmFood = getFarmFoodProduction(village.structures)
+        if (farmFood > 0) {
+          const cap = getStockpileCap(village.structures)
+          village.stockpile.food = Math.min(cap, village.stockpile.food + farmFood)
+        }
       }
     }
 
@@ -483,13 +538,21 @@ export class CompetitionEngine {
         const pos = resolveEventPosition(event, village.campfirePosition)
 
         if (event.type === 'predator') {
+          const detectionBonus = getWatchtowerDetectionBonus(village.structures)
+          const effectiveRadius = event.radius + detectionBonus
+          const damageReduction = hasWall(village.structures) ? 0.5 : 1.0
+
           for (const villager of village.villagers) {
             if (!villager.alive) continue
             const dist = Math.abs(villager.position.x - pos.x) + Math.abs(villager.position.y - pos.y)
-            if (dist <= event.radius) {
-              const health = getNeed(villager, NeedType.Health)
-              health.current -= event.severity / Math.max(1, event.durationTicks || 1)
-              clampNeed(health)
+            if (dist <= effectiveRadius) {
+              // Villagers within detection range (but outside damage range) can flee
+              // Villagers within damage range take reduced damage if walls present
+              if (dist <= event.radius) {
+                const health = getNeed(villager, NeedType.Health)
+                health.current -= (event.severity * damageReduction) / Math.max(1, event.durationTicks || 1)
+                clampNeed(health)
+              }
             }
           }
         } else if (event.type === 'cold_snap') {
@@ -502,6 +565,7 @@ export class CompetitionEngine {
             }
           }
         }
+        // storm and illness are handled via ctx.isStorm flag and statusEffects — no per-event processing needed
       }
     }
   }
@@ -631,6 +695,7 @@ export class CompetitionEngine {
     const actionTypes: VillagerAction[] = [
       'idle', 'forage', 'eat', 'rest', 'chop_wood', 'mine_stone',
       'haul', 'fish', 'flee', 'build_shelter', 'build_storage', 'warm_up',
+      'build_watchtower', 'build_farm', 'build_wall', 'build_well',
     ]
     for (const a of actionTypes) activityBreakdown[a] = 0
     for (const v of alive) {

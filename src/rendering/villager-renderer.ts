@@ -10,6 +10,7 @@ import { actionToAnimation, tickAnimation } from './animation.ts'
 interface VillagerSprite {
   sprite: Sprite
   healthBar: Graphics
+  statusIcon: Graphics
   prevX: number
   prevY: number
   animation: string
@@ -52,12 +53,15 @@ export class VillagerRenderer {
         sprite.anchor.set(0.5, 0.5)
 
         const healthBar = new Graphics()
+        const statusIcon = new Graphics()
         this.container.addChild(sprite)
         this.container.addChild(healthBar)
+        this.container.addChild(statusIcon)
 
         entry = {
           sprite,
           healthBar,
+          statusIcon,
           prevX: v.position.x,
           prevY: v.position.y,
           animation: 'idle',
@@ -123,6 +127,29 @@ export class VillagerRenderer {
         entry.healthBar.visible = true
       }
 
+      // Status icons above villager
+      entry.statusIcon.clear()
+      entry.statusIcon.visible = false
+      const hungerNeed = v.needs.get(NeedType.Hunger)
+      const energyNeed = v.needs.get(NeedType.Energy)
+      const isSick = v.statusEffects && v.statusEffects.length > 0
+      const isFleeing = v.currentAction === 'flee'
+      const iconY = entry.sprite.y - this.tileSize / 2 - 8
+
+      if (isFleeing) {
+        entry.statusIcon.circle(entry.sprite.x, iconY, 3).fill(0xfbbf24)
+        entry.statusIcon.visible = true
+      } else if (isSick) {
+        entry.statusIcon.circle(entry.sprite.x, iconY, 3).fill(0x4ade80)
+        entry.statusIcon.visible = true
+      } else if (hungerNeed && hungerNeed.current < 25) {
+        entry.statusIcon.circle(entry.sprite.x, iconY, 3).fill(0xef4444)
+        entry.statusIcon.visible = true
+      } else if (energyNeed && energyNeed.current < 20) {
+        entry.statusIcon.circle(entry.sprite.x, iconY, 3).fill(0x60a5fa)
+        entry.statusIcon.visible = true
+      }
+
       // Carried resource indicator
       if (v.carrying) {
         const dotColor = v.carrying.type === 'food' ? 0x44aa44 : v.carrying.type === 'wood' ? 0x8b4513 : 0x888888
@@ -148,8 +175,10 @@ export class VillagerRenderer {
     if (entry) {
       this.container.removeChild(entry.sprite)
       this.container.removeChild(entry.healthBar)
+      this.container.removeChild(entry.statusIcon)
       entry.sprite.destroy()
       entry.healthBar.destroy()
+      entry.statusIcon.destroy()
       this.sprites.delete(id)
     }
   }

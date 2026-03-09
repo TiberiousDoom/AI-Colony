@@ -156,6 +156,29 @@ export class World {
     }
   }
 
+  /** Convert a nearby grass tile to forest or stone with full resources. Returns true if successful. */
+  convertNearbyGrassTile(cx: number, cy: number, targetType: 'forest' | 'stone'): boolean {
+    const searchRadius = 5
+    for (let r = 0; r <= searchRadius; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue // Only check border of radius
+          const x = cx + dx
+          const y = cy + dy
+          if (x < 0 || x >= this.width || y < 0 || y >= this.height) continue
+          const tile = this.tiles[y][x]
+          if (tile.type === TileType.Grass) {
+            tile.type = targetType === 'forest' ? TileType.Forest : TileType.Stone
+            tile.resourceAmount = targetType === 'forest' ? 100 : 80
+            this.dirtyTiles.add(`${x},${y}`)
+            return true
+          }
+        }
+      }
+    }
+    return false
+  }
+
   /** Apply blight: destroy resources in radius, set recovery timer */
   applyBlight(cx: number, cy: number, radius: number, durationTicks: number): void {
     const minX = Math.max(0, cx - radius)

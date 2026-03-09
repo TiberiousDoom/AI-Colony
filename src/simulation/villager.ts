@@ -49,6 +49,10 @@ export type VillagerAction =
   | 'build_shelter'
   | 'build_storage'
   | 'warm_up'
+  | 'build_watchtower'
+  | 'build_farm'
+  | 'build_wall'
+  | 'build_well'
 
 // --- Villager ---
 
@@ -68,8 +72,19 @@ export interface Villager {
   alive: boolean
   /** Carried resource (for hauling) */
   carrying: { type: 'food' | 'wood' | 'stone'; amount: number } | null
+  /** Active status effects (illness, etc.) */
+  statusEffects: Array<{ type: 'illness'; ticksRemaining: number }>
   /** Last AI decision (for inspector display) */
-  lastDecision?: { reason: string; scores?: Array<{ action: string; score: number; reason: string }> }
+  lastDecision?: {
+    reason: string
+    scores?: Array<{ action: string; score: number; reason: string }>
+    goapPlan?: {
+      goal: string
+      steps: Array<{ action: string; cost: number; completed: boolean }>
+      totalCost: number
+      currentStepIndex: number
+    }
+  }
 }
 
 // --- Stockpile ---
@@ -112,6 +127,7 @@ export function createVillager(id: string, name: string, x: number, y: number): 
     path: [],
     alive: true,
     carrying: null,
+    statusEffects: [],
   }
 }
 
@@ -171,13 +187,16 @@ export function tickNeeds(villager: Villager, season: Season = 'summer'): void {
   const health = getNeed(villager, NeedType.Health)
   const warmth = getNeed(villager, NeedType.Warmth)
 
+  // Illness doubles drain rates
+  const illnessMultiplier = villager.statusEffects.some(e => e.type === 'illness') ? 2 : 1
+
   // Base drain
-  hunger.current -= hunger.drainRate
-  energy.current -= energy.drainRate
+  hunger.current -= hunger.drainRate * illnessMultiplier
+  energy.current -= energy.drainRate * illnessMultiplier
 
   // Warmth drain: 3/tick in winter, 0 otherwise
   if (season === 'winter') {
-    warmth.current -= 3
+    warmth.current -= 3 * illnessMultiplier
   }
 
   // Starvation damage

@@ -5,7 +5,7 @@
 import type { Position, VillageStockpile } from './villager.ts'
 import type { World } from './world.ts'
 
-export type StructureType = 'shelter' | 'storage'
+export type StructureType = 'shelter' | 'storage' | 'watchtower' | 'farm' | 'wall' | 'well'
 
 export interface Structure {
   id: string
@@ -22,6 +22,10 @@ export interface StructureCost {
 export const STRUCTURE_COSTS: Record<StructureType, StructureCost> = {
   shelter: { wood: 20, stone: 0 },
   storage: { wood: 15, stone: 10 },
+  watchtower: { wood: 10, stone: 15 },
+  farm: { wood: 15, stone: 0 },
+  wall: { wood: 0, stone: 12 },
+  well: { wood: 0, stone: 20 },
 }
 
 /** Base stockpile cap per resource type (food, wood, stone) */
@@ -83,6 +87,26 @@ export function getStorageBonus(structures: Structure[]): number {
 
 export function getStockpileCap(structures: Structure[]): number {
   return BASE_STOCKPILE_CAP + getStorageBonus(structures)
+}
+
+/** Detection range bonus per watchtower (tiles) */
+export function getWatchtowerDetectionBonus(structures: Structure[]): number {
+  return structures.filter(s => s.type === 'watchtower').length * 8
+}
+
+/** Food produced per farm per day (spring/summer only) */
+export function getFarmFoodProduction(structures: Structure[]): number {
+  return structures.filter(s => s.type === 'farm').length * 5
+}
+
+/** Whether the village has at least one well */
+export function hasWell(structures: Structure[]): boolean {
+  return structures.some(s => s.type === 'well')
+}
+
+/** Whether the village has at least one wall */
+export function hasWall(structures: Structure[]): boolean {
+  return structures.some(s => s.type === 'wall')
 }
 
 export function isAtStructure(pos: Position, structures: Structure[], type?: StructureType): boolean {

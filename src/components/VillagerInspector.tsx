@@ -5,12 +5,20 @@
 import type { Villager } from '../simulation/villager.ts'
 import { NeedBar } from './NeedBar.tsx'
 
+interface GOAPPlanDisplay {
+  goal: string
+  steps: Array<{ action: string; cost: number; completed: boolean }>
+  totalCost: number
+  currentStepIndex: number
+}
+
 interface VillagerInspectorProps {
   villager: Villager
   villageName: string
   villageColor: string
   aiName: string
   scores?: Array<{ action: string; score: number; reason: string }>
+  goapPlan?: GOAPPlanDisplay
   onClose: () => void
 }
 
@@ -21,7 +29,7 @@ const NEED_LABELS: Record<string, string> = {
   warmth: 'Warmth',
 }
 
-export function VillagerInspector({ villager, villageName, villageColor, aiName, scores, onClose }: VillagerInspectorProps) {
+export function VillagerInspector({ villager, villageName, villageColor, aiName, scores, goapPlan, onClose }: VillagerInspectorProps) {
   return (
     <div
       data-testid="villager-inspector"
@@ -89,8 +97,15 @@ export function VillagerInspector({ villager, villageName, villageColor, aiName,
             </div>
           )}
           {villager.carrying && (
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>
+            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>
               Carrying: {villager.carrying.amount} {villager.carrying.type}
+            </div>
+          )}
+          {villager.statusEffects && villager.statusEffects.length > 0 && (
+            <div style={{ fontSize: 12, color: '#f87171' }}>
+              {villager.statusEffects.map((e, i) => (
+                <span key={i}>{e.type} ({e.ticksRemaining}t){i < villager.statusEffects.length - 1 ? ', ' : ''}</span>
+              ))}
             </div>
           )}
         </div>
@@ -98,7 +113,33 @@ export function VillagerInspector({ villager, villageName, villageColor, aiName,
         {/* AI Rationale */}
         <div style={{ flex: '1 1 200px', minWidth: 180 }}>
           <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>AI Decision</div>
-          {scores && scores.length > 0 ? (
+          {goapPlan ? (
+            <div>
+              <div style={{ fontSize: 11, color: '#a78bfa', marginBottom: 4 }}>
+                Goal: <span style={{ fontWeight: 600 }}>{goapPlan.goal}</span>
+                <span style={{ color: '#64748b', marginLeft: 6 }}>cost: {goapPlan.totalCost}</span>
+              </div>
+              {goapPlan.steps.length > 0 ? (
+                goapPlan.steps.map((step, i) => (
+                  <div key={i} style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    fontSize: 11,
+                    color: i === goapPlan.currentStepIndex ? '#4ade80' : step.completed ? '#64748b' : '#94a3b8',
+                    marginBottom: 2,
+                    padding: '1px 4px',
+                    background: i === goapPlan.currentStepIndex ? '#1e3a2f' : 'transparent',
+                    borderRadius: 3,
+                  }}>
+                    <span>{step.completed ? '\u2713 ' : i === goapPlan.currentStepIndex ? '\u25B6 ' : '  '}{step.action}</span>
+                    <span>{step.cost}</span>
+                  </div>
+                ))
+              ) : (
+                <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>No plan steps</div>
+              )}
+            </div>
+          ) : scores && scores.length > 0 ? (
             <div>
               {scores.slice(0, 5).map((s, i) => (
                 <div key={i} style={{

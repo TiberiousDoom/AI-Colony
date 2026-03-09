@@ -27,7 +27,7 @@ export class StructureRenderer {
       activeKeys.add(key)
 
       if (!this.sprites.has(key)) {
-        const texName = s.type === 'shelter' ? 'structure_shelter' : 'structure_storage'
+        const texName = `structure_${s.type}` as const
         const sprite = new Sprite(this.spriteManager.getTexture(texName))
         sprite.x = s.position.x * this.tileSize
         sprite.y = s.position.y * this.tileSize

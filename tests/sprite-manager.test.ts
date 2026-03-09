@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { SPRITE_NAMES } from '../src/rendering/sprite-generator.ts'
 
 describe('SpriteManager / Sprite Inventory', () => {
-  it('has exactly 29 sprite names', () => {
-    expect(SPRITE_NAMES).toHaveLength(29)
+  it('has exactly 33 sprite names', () => {
+    expect(SPRITE_NAMES).toHaveLength(33)
   })
 
   it('includes all terrain sprites', () => {

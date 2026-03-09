@@ -14,6 +14,7 @@ import { StockpileRenderer } from './stockpile-renderer.ts'
 import { LightingOverlay } from './lighting.ts'
 import { Minimap } from './minimap.ts'
 import type { SpriteManager } from './sprite-manager.ts'
+import { ParticlePool, type ParticleType } from './particles.ts'
 import { getStockpileCap } from '../simulation/structures.ts'
 
 const TILE_SIZE = 16
@@ -29,10 +30,13 @@ export class VillageRenderer {
   private stockpileRenderer: StockpileRenderer
   private lighting: LightingOverlay
   private minimap: Minimap
+  private particles: ParticlePool
   private clipMask: Graphics
   private initialized = false
   private viewportWidth = 0
   private viewportHeight = 0
+  /** Track previous action ticks for particle emission */
+  private prevActionTicks: Map<string, number> = new Map()
 
   constructor(
     spriteManager: SpriteManager,
@@ -47,6 +51,7 @@ export class VillageRenderer {
     this.villagerRenderer = new VillagerRenderer(spriteManager, TILE_SIZE, villageTint)
     this.structureRenderer = new StructureRenderer(spriteManager, TILE_SIZE)
     this.stockpileRenderer = new StockpileRenderer(TILE_SIZE)
+    this.particles = new ParticlePool()
     this.lighting = new LightingOverlay(0, 0) // Resized during init
     this.minimap = new Minimap(worldWidth, worldHeight, (wx, wy) => {
       this.camera.centerOn(wx, wy)
@@ -72,6 +77,7 @@ export class VillageRenderer {
     worldContainer.addChild(this.structureRenderer.container)
     worldContainer.addChild(this.stockpileRenderer.container)
     worldContainer.addChild(this.villagerRenderer.container)
+    worldContainer.addChild(this.particles.container)
     this.rootContainer.addChild(worldContainer)
 
     // Lighting overlay (screen-space, not transformed by camera)
@@ -109,6 +115,23 @@ export class VillageRenderer {
     this.villagerRenderer.container.x = t.x
     this.villagerRenderer.container.y = t.y
     this.villagerRenderer.container.scale.set(t.scale)
+    this.particles.container.x = t.x
+    this.particles.container.y = t.y
+    this.particles.container.scale.set(t.scale)
+
+    // Emit particles when actions complete
+    for (const v of village.villagers) {
+      const prevTicks = this.prevActionTicks.get(v.id) ?? 0
+      if (prevTicks > 0 && v.actionTicksRemaining === 0) {
+        const px = (v.position.x + 0.5) * TILE_SIZE
+        const py = (v.position.y + 0.5) * TILE_SIZE
+        const particleType = this.getParticleType(v.currentAction)
+        if (particleType) {
+          this.particles.emit(px, py, particleType)
+        }
+      }
+      this.prevActionTicks.set(v.id, v.actionTicksRemaining)
+    }
 
     // Update sub-renderers
     this.tileRenderer.updateTiles(village.world)
@@ -116,6 +139,7 @@ export class VillageRenderer {
     this.villagerRenderer.update(village.villagers, tickProgress, currentTick)
     this.structureRenderer.update(village.structures)
     this.stockpileRenderer.update(village.stockpile, village.campfirePosition, getStockpileCap(village.structures))
+    this.particles.update(deltaMs)
     this.lighting.update(timeOfDay, village.campfirePosition, this.camera, TILE_SIZE, deltaMs)
     this.minimap.update(
       village.world, village.villagers, village.structures,
@@ -153,11 +177,24 @@ export class VillageRenderer {
     this.villagerRenderer.setSelected(id)
   }
 
+  private getParticleType(action: string): ParticleType | null {
+    switch (action) {
+      case 'chop_wood': return 'chop_sparks'
+      case 'forage': return 'forage_leaves'
+      case 'mine_stone': return 'mine_dust'
+      case 'build_shelter': case 'build_storage': case 'build_watchtower':
+      case 'build_farm': case 'build_wall': case 'build_well':
+        return 'build_dust'
+      default: return null
+    }
+  }
+
   destroy(): void {
     this.tileRenderer.destroy()
     this.villagerRenderer.destroy()
     this.structureRenderer.destroy()
     this.stockpileRenderer.destroy()
+    this.particles.destroy()
     this.lighting.destroy()
     this.minimap.destroy()
     this.rootContainer.destroy({ children: true })

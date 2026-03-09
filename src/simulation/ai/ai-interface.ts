@@ -23,6 +23,13 @@ export interface AIDecision {
   reason: string
   /** Optional: scoring breakdown for inspector display (Utility AI populates this, BT AI omits it) */
   scores?: Array<{ action: string; score: number; reason: string }>
+  /** Optional: GOAP plan visualization data */
+  goapPlan?: {
+    goal: string
+    steps: Array<{ action: string; cost: number; completed: boolean }>
+    totalCost: number
+    currentStepIndex: number
+  }
 }
 
 /** Read-only snapshot of world state visible to the AI */
