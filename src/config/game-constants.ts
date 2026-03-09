@@ -12,6 +12,7 @@ export const TIMING = {
   DAY_TICKS: 20,
   NIGHT_TICKS: 10,
   DAYS_PER_SEASON: 7,
+  SNAPSHOTS_PER_DAY: 4,
 } as const
 
 // --- Population ---

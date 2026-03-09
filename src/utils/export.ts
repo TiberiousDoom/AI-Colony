@@ -49,10 +49,11 @@ export function exportMetricsCSV(state: CompetitionState): Blob {
   const rows: string[] = [headers.join(',')]
 
   // Find max history length
-  const maxDays = Math.max(...state.villages.map(v => v.history.daily.length))
+  const maxSnapshots = Math.max(...state.villages.map(v => v.history.daily.length))
 
-  for (let d = 0; d < maxDays; d++) {
-    const row: (string | number)[] = [d + 1]
+  for (let d = 0; d < maxSnapshots; d++) {
+    const firstSnap = state.villages.find(v => v.history.daily[d])?.history.daily[d]
+    const row: (string | number)[] = [firstSnap ? Number(firstSnap.day.toFixed(2)) : d]
     for (const v of state.villages) {
       const snap = v.history.daily[d]
       if (snap) {

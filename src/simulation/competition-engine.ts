@@ -28,7 +28,7 @@ import type { Structure } from './structures.ts'
 import { type StructureType, getStockpileCap, getShelterCapacity, createStructure, getFarmFoodProduction, getWatchtowerDetectionBonus, hasWall } from './structures.ts'
 import { EventScheduler, type RandomEvent, resolveEventPosition } from './events.ts'
 import {
-  TICKS_PER_DAY, DAY_TICKS, DAYS_PER_SEASON,
+  TICKS_PER_DAY, DAY_TICKS, DAYS_PER_SEASON, SNAPSHOT_INTERVAL, SNAPSHOTS_PER_DAY,
   type SimulationHistory, type SimulationEvent, type SimulationEventType,
 } from './simulation-engine.ts'
 import { COMPETITION, EVENTS as EVENT_CONST, POPULATION } from '../config/game-constants.ts'
@@ -197,8 +197,8 @@ export class CompetitionEngine {
     // 4. Tick event durations
     this.state.activeEvents = this.eventScheduler.tickEvents(this.state.activeEvents)
 
-    // 5. History snapshot on day boundary
-    if (this.state.tick % TICKS_PER_DAY === 0) {
+    // 5. History snapshot every 6 hours (SNAPSHOTS_PER_DAY times per day)
+    if (this.state.tick % SNAPSHOT_INTERVAL === 0) {
       for (const village of this.state.villages) {
         if (!village.isEliminated) {
           this.recordSnapshot(village)
@@ -772,7 +772,7 @@ export class CompetitionEngine {
     )
 
     village.history.daily.push({
-      day: this.state.dayCount,
+      day: this.state.tick / TICKS_PER_DAY,
       season: this.state.season,
       population,
       food: village.stockpile.food,

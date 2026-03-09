@@ -76,22 +76,26 @@ export function ResultsSummary() {
   const { villages, globalEvents } = compState
   const winnerInfo = getWinnerMessage(compState)
 
-  // Build prosperity chart data
-  const maxDays = Math.max(...villages.map(v => v.history.daily.length))
-  const prosperityData = Array.from({ length: maxDays }, (_, d) => {
-    const point: Record<string, number | string> = { day: d + 1 }
+  // Build prosperity chart data (snapshots every 6 hours)
+  const maxSnapshots = Math.max(...villages.map(v => v.history.daily.length))
+  const maxDays = Math.ceil(maxSnapshots / TIMING.SNAPSHOTS_PER_DAY)
+  const dayTicks = Array.from({ length: maxDays + 1 }, (_, i) => i)
+  const prosperityData = Array.from({ length: maxSnapshots }, (_, d) => {
+    const point: Record<string, number | string> = { day: d / TIMING.SNAPSHOTS_PER_DAY }
     for (const v of villages) {
       const snap = v.history.daily[d]
+      if (snap) point.day = snap.day
       point[v.id] = snap ? snap.prosperityScore : 0
     }
     return point
   })
 
   // Build population chart data
-  const populationData = Array.from({ length: maxDays }, (_, d) => {
-    const point: Record<string, number | string> = { day: d + 1 }
+  const populationData = Array.from({ length: maxSnapshots }, (_, d) => {
+    const point: Record<string, number | string> = { day: d / TIMING.SNAPSHOTS_PER_DAY }
     for (const v of villages) {
       const snap = v.history.daily[d]
+      if (snap) point.day = snap.day
       point[v.id] = snap ? snap.population : 0
     }
     return point
@@ -206,7 +210,7 @@ export function ResultsSummary() {
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={prosperityData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="day" stroke="#475569" fontSize={11} />
+              <XAxis dataKey="day" stroke="#475569" fontSize={11} ticks={dayTicks} type="number" domain={['dataMin', 'dataMax']} tickFormatter={(v: number) => String(Math.round(v))} />
               <YAxis stroke="#475569" fontSize={11} />
               <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', fontSize: 12 }} />
               <Legend />
@@ -222,7 +226,7 @@ export function ResultsSummary() {
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={populationData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="day" stroke="#475569" fontSize={11} />
+              <XAxis dataKey="day" stroke="#475569" fontSize={11} ticks={dayTicks} type="number" domain={['dataMin', 'dataMax']} tickFormatter={(v: number) => String(Math.round(v))} />
               <YAxis stroke="#475569" fontSize={11} />
               <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', fontSize: 12 }} />
               <Legend />
@@ -236,15 +240,15 @@ export function ResultsSummary() {
       </div>
 
       {/* Timeline Scrubber */}
-      {maxDays > 1 && (
+      {maxSnapshots > 1 && (
         <div style={{ marginBottom: 24, background: '#0f172a', borderRadius: 8, padding: 16 }}>
           <div style={{ fontSize: 13, color: '#64748b', marginBottom: 8, textTransform: 'uppercase' }}>
-            Timeline Scrubber {scrubDay !== null && `— Day ${scrubDay}`}
+            Timeline Scrubber {scrubDay !== null && `— Day ${(scrubDay / TIMING.SNAPSHOTS_PER_DAY).toFixed(1)}`}
           </div>
           <input
             type="range"
             min={1}
-            max={maxDays}
+            max={maxSnapshots}
             value={scrubDay ?? 1}
             onChange={e => setScrubDay(parseInt(e.target.value, 10))}
             style={{ width: '100%', accentColor: '#3b82f6' }}
