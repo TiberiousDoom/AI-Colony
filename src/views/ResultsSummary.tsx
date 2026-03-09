@@ -12,6 +12,7 @@ import { exportRunJSON, exportMetricsCSV, downloadBlob } from '../utils/export.t
 import { encodeConfigString } from '../config/game-config.ts'
 import type { CompetitionState, VillageState } from '../simulation/competition-engine.ts'
 import type { SimulationEvent } from '../simulation/simulation-engine.ts'
+import { TIMING } from '../config/game-constants.ts'
 
 const VILLAGE_COLORS: Record<string, string> = {
   utility: '#3b82f6',
@@ -48,7 +49,7 @@ function getFinalProsperity(v: VillageState): number {
 
 function getDaysSurvived(v: VillageState, state: CompetitionState): number {
   if (v.isEliminated && v.eliminationTick !== null) {
-    return Math.floor(v.eliminationTick / 100) // TICKS_PER_DAY = 100
+    return Math.floor(v.eliminationTick / TIMING.TICKS_PER_DAY)
   }
   return state.dayCount
 }
@@ -276,7 +277,7 @@ export function ResultsSummary() {
           ) : (
             keyMoments.map((ev, i) => (
               <div key={i} style={{ fontSize: 12, color: '#94a3b8', marginBottom: 2, display: 'flex', gap: 8 }}>
-                <span style={{ color: '#475569', minWidth: 50 }}>Day {Math.floor(ev.tick / 100)}</span>
+                <span style={{ color: '#475569', minWidth: 50 }}>Day {Math.floor(ev.tick / TIMING.TICKS_PER_DAY)}</span>
                 <span style={{ color: ev.villageId ? getVillageColor(ev.villageId) : '#64748b' }}>{ev.message}</span>
               </div>
             ))
