@@ -525,6 +525,8 @@ export class SimulationEngine {
       this.state.structures.length,
       uniqueTypes,
       this.state.dayCount,
+      avgHunger,
+      avgEnergy,
     )
 
     this.state.history.daily.push({

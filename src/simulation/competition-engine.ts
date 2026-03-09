@@ -658,6 +658,27 @@ export class CompetitionEngine {
           this.addVillageEvent(village, 'stagnation_warning',
             `${village.name} prosperity stagnating (<5% change over ${STAGNATION_WINDOW} days)`)
         }
+
+        // Escalation: if stagnation persists for 2 consecutive windows (60 days), force a challenging event
+        if (daily.length >= STAGNATION_WINDOW * 2) {
+          const doubleOld = daily[daily.length - STAGNATION_WINDOW * 2]
+          if (doubleOld && doubleOld.prosperityScore > 0) {
+            const longChange = Math.abs(recent.prosperityScore - doubleOld.prosperityScore) / doubleOld.prosperityScore
+            if (longChange < STAGNATION_THRESHOLD) {
+              const alreadyForced = village.events.some(
+                e => e.type === 'random_event' && e.message.includes('stagnation breaker') && e.day >= this.state.dayCount - STAGNATION_WINDOW,
+              )
+              if (!alreadyForced) {
+                const forcedEvent = this.rng.next() < 0.5
+                  ? this.eventScheduler.createIllness(this.state.dayCount)
+                  : this.eventScheduler.createStorm(this.state.dayCount)
+                this.state.activeEvents.push(forcedEvent)
+                this.addGlobalEvent('random_event',
+                  `Forced ${forcedEvent.type} event (stagnation breaker)`)
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -712,6 +733,7 @@ export class CompetitionEngine {
       village.stockpile.food, village.stockpile.wood, village.stockpile.stone,
       village.structures.length, uniqueTypes,
       this.state.dayCount,
+      avgHunger, avgEnergy,
     )
 
     village.history.daily.push({

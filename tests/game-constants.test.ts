@@ -70,14 +70,15 @@ describe('game-constants regression guard', () => {
   })
 
   it('SCORING weights match Phase 1-4 formula', () => {
-    expect(SCORING.POP_WEIGHT).toBe(10)
-    expect(SCORING.HEALTH_WEIGHT).toBe(0.5)
+    expect(SCORING.POP_WEIGHT).toBe(5)
+    expect(SCORING.HEALTH_WEIGHT).toBe(1.0)
     expect(SCORING.FOOD_WEIGHT).toBe(0.3)
     expect(SCORING.WOOD_WEIGHT).toBe(0.2)
     expect(SCORING.STONE_WEIGHT).toBe(0.2)
     expect(SCORING.STRUCTURE_WEIGHT).toBe(5)
-    expect(SCORING.UNIQUE_TYPE_WEIGHT).toBe(10)
-    expect(SCORING.DAYS_WEIGHT).toBe(0.5)
+    expect(SCORING.UNIQUE_TYPE_WEIGHT).toBe(5)
+    expect(SCORING.DAYS_WEIGHT).toBe(1.0)
+    expect(SCORING.EFFICIENCY_FACTOR).toBe(0.02)
   })
 
   it('EVENTS values match defaults', () => {

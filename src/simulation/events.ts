@@ -29,6 +29,14 @@ export function resolveEventPosition(event: RandomEvent, campfire: Position): Po
   }
 }
 
+/** Progressive difficulty scaling based on day count */
+export function getDifficultyMultiplier(dayCount: number): number {
+  if (dayCount <= 15) return 1.0
+  if (dayCount <= 30) return 1.2
+  if (dayCount <= 50) return 1.5
+  return 1.8
+}
+
 export class EventScheduler {
   private rng: SeededRNG
   private daysSinceLastEvent: number = 0
@@ -89,7 +97,8 @@ export class EventScheduler {
   private createPredator(dayCount: number): RandomEvent {
     const dx = this.rng.nextInt(-EVENTS.PREDATOR_OFFSET, EVENTS.PREDATOR_OFFSET)
     const dy = this.rng.nextInt(-EVENTS.PREDATOR_OFFSET, EVENTS.PREDATOR_OFFSET)
-    const severity = this.rng.nextInt(EVENTS.PREDATOR_SEVERITY_MIN, EVENTS.PREDATOR_SEVERITY_MAX)
+    const baseSeverity = this.rng.nextInt(EVENTS.PREDATOR_SEVERITY_MIN, EVENTS.PREDATOR_SEVERITY_MAX)
+    const severity = Math.round(baseSeverity * getDifficultyMultiplier(dayCount))
     return {
       type: 'predator',
       triggerTick: dayCount,
@@ -114,23 +123,25 @@ export class EventScheduler {
   }
 
   private createColdSnap(dayCount: number): RandomEvent {
+    const mult = getDifficultyMultiplier(dayCount)
     return {
       type: 'cold_snap',
       triggerTick: dayCount,
       relativePosition: { dx: 0, dy: 0 },
       radius: EVENTS.COLD_SNAP_RADIUS,
-      durationTicks: EVENTS.COLD_SNAP_DURATION,
+      durationTicks: Math.round(EVENTS.COLD_SNAP_DURATION * mult),
       severity: EVENTS.COLD_SNAP_SEVERITY,
     }
   }
 
   createIllness(dayCount: number): RandomEvent {
+    const mult = getDifficultyMultiplier(dayCount)
     return {
       type: 'illness',
       triggerTick: dayCount,
       relativePosition: { dx: 0, dy: 0 },
       radius: EVENTS.COLD_SNAP_RADIUS,
-      durationTicks: EVENTS.ILLNESS_DURATION,
+      durationTicks: Math.round(EVENTS.ILLNESS_DURATION * mult),
       severity: EVENTS.ILLNESS_SEVERITY,
     }
   }

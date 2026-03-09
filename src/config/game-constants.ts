@@ -76,14 +76,15 @@ export const STRUCTURES = {
 // --- Scoring ---
 
 export const SCORING = {
-  POP_WEIGHT: 10,
-  HEALTH_WEIGHT: 0.5,
+  POP_WEIGHT: 5,
+  HEALTH_WEIGHT: 1.0,
   FOOD_WEIGHT: 0.3,
   WOOD_WEIGHT: 0.2,
   STONE_WEIGHT: 0.2,
   STRUCTURE_WEIGHT: 5,
-  UNIQUE_TYPE_WEIGHT: 10,
-  DAYS_WEIGHT: 0.5,
+  UNIQUE_TYPE_WEIGHT: 5,
+  DAYS_WEIGHT: 1.0,
+  EFFICIENCY_FACTOR: 0.02,
 } as const
 
 // --- Events ---
