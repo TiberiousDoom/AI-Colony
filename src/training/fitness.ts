@@ -4,7 +4,6 @@
  */
 
 import { calculateProsperity } from '../utils/scoring.ts'
-import type { VillageStockpile } from '../simulation/villager.ts'
 import type { Structure } from '../simulation/structures.ts'
 
 export interface FitnessInput {

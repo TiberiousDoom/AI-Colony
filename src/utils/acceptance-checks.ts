@@ -1584,7 +1584,7 @@ const p5bTrainingRuns: AcceptanceCheck = {
       const result = runGeneration(pop, {
         populationSize: 4, generationsMax: 1, ticksPerEvaluation: 30,
         mutationRate: 0.05, elitePercent: 0.5, seed: 42, worldSize: 'small', biome: 'temperate',
-      }, rng)
+      }, 42)
       if (result.nextPopulation.length !== 4) {
         return { status: 'fail', detail: `Expected 4, got ${result.nextPopulation.length}` }
       }

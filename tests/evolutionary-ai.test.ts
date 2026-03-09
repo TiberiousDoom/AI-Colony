@@ -3,7 +3,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { EvolutionaryAI } from '../src/simulation/ai/evolutionary-ai.ts'
-import { createRandomGenome, getGenomeNeedCount } from '../src/simulation/ai/genome.ts'
+import { createRandomGenome } from '../src/simulation/ai/genome.ts'
 import { createRNG } from '../src/utils/seed.ts'
 import { createVillager } from '../src/simulation/villager.ts'
 import { World } from '../src/simulation/world.ts'
@@ -13,7 +13,7 @@ function makeTestContext(needCount = 4) {
   const rng = createRNG(42)
   const world = new World({ width: 32, height: 32, seed: 42 })
   const hasCooling = needCount === 5
-  const villager = createVillager('test', rng, world, hasCooling)
+  const villager = createVillager('test', 'Test', 16, 16, hasCooling)
   return { rng, world, villager }
 }
 

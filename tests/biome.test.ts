@@ -47,7 +47,7 @@ describe('Biome world generation', () => {
       let landTiles = 0
       for (let y = 0; y < world.height; y++) {
         for (let x = 0; x < world.width; x++) {
-          if (world.getTile(x, y).type !== TileType.Water) landTiles++
+          if (world.getTile(x, y)!.type !== TileType.Water) landTiles++
         }
       }
       expect(landTiles).toBeGreaterThan(0)
@@ -61,8 +61,8 @@ describe('Biome world generation', () => {
     let desertWater = 0, islandWater = 0
     for (let y = 0; y < 48; y++) {
       for (let x = 0; x < 48; x++) {
-        if (desertWorld.getTile(x, y).type === TileType.Water) desertWater++
-        if (islandWorld.getTile(x, y).type === TileType.Water) islandWater++
+        if (desertWorld.getTile(x, y)!.type === TileType.Water) desertWater++
+        if (islandWorld.getTile(x, y)!.type === TileType.Water) islandWater++
       }
     }
     expect(desertWater).toBeLessThan(islandWater)

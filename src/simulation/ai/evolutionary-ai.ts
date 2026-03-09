@@ -8,7 +8,7 @@ import type { IAISystem, AIDecision, AIWorldView } from './ai-interface.ts'
 import type { Villager, VillagerAction } from '../villager.ts'
 import { NeedType, getNeed } from '../villager.ts'
 import { getAllActions } from '../actions.ts'
-import { type Genome, ACTION_LIST, NUM_ENV_WEIGHTS } from './genome.ts'
+import { type Genome, ACTION_LIST } from './genome.ts'
 
 /** Urgency curve matching Utility AI: (1 - value/100)^2 */
 function urgencyCurve(value: number): number {
