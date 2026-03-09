@@ -2,12 +2,20 @@
  * SetupScreen: pre-simulation configuration UI.
  */
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import {
   type GameConfig, type WorldSize, type ResourceLevel, type EventFrequency,
   getDefaultGameConfig, validateAISelection, decodeConfigString,
 } from '../config/game-config.ts'
+import type { BiomeType } from '../simulation/biomes.ts'
+import type { Genome } from '../simulation/ai/genome.ts'
 import { useSimulationStore } from '../store/simulation-store.ts'
+import { BiomeSelector } from '../components/BiomeSelector.tsx'
+import { GenomeLibrary } from '../components/GenomeLibrary.tsx'
+import { TrainingView } from './TrainingView.tsx'
+import { useTraining } from '../training/useTraining.ts'
+import { getDefaultTrainingConfig } from '../training/trainer.ts'
+import { saveGenome } from '../utils/genome-storage.ts'
 
 const SECTION_STYLE: React.CSSProperties = {
   marginBottom: 16,
@@ -64,11 +72,17 @@ export function SetupScreen() {
   const startWithConfig = useSimulationStore(s => s.startWithConfig)
   const [config, setConfig] = useState<GameConfig>(getDefaultGameConfig)
   const [configString, setConfigString] = useState('')
+  const [selectedGenome, setSelectedGenome] = useState<Genome | null>(null)
+  const [showTraining, setShowTraining] = useState(false)
+  const trainingStartTime = useRef(0)
 
-  const aiCount = [config.aiSelection.utility, config.aiSelection.bt, config.aiSelection.goap].filter(Boolean).length
-  const isValid = validateAISelection(config.aiSelection)
+  const { trainingState, isTraining, startTraining, stopTraining, trainedGenome } = useTraining()
 
-  function handleAIToggle(key: 'utility' | 'bt' | 'goap') {
+  const aiCount = [config.aiSelection.utility, config.aiSelection.bt, config.aiSelection.goap, config.aiSelection.evolutionary].filter(Boolean).length
+  const isValid = validateAISelection(config.aiSelection) &&
+    (!config.aiSelection.evolutionary || selectedGenome !== null)
+
+  function handleAIToggle(key: 'utility' | 'bt' | 'goap' | 'evolutionary') {
     setConfig(prev => ({
       ...prev,
       aiSelection: { ...prev.aiSelection, [key]: !prev.aiSelection[key] },
@@ -86,6 +100,31 @@ export function SetupScreen() {
     setConfigString('')
   }
 
+  function handleStartTraining() {
+    const tc = getDefaultTrainingConfig()
+    tc.biome = config.biome
+    tc.worldSize = config.worldSize
+    tc.seed = config.seed
+    trainingStartTime.current = Date.now()
+    startTraining(tc)
+    setShowTraining(true)
+  }
+
+  function handleTrainingClose() {
+    const genome = trainedGenome
+    if (genome) {
+      saveGenome(genome)
+      setSelectedGenome(genome)
+      setConfig(prev => ({ ...prev, evolutionaryGenome: genome }))
+    }
+    setShowTraining(false)
+  }
+
+  function handleGenomeSelect(genome: Genome | null) {
+    setSelectedGenome(genome)
+    setConfig(prev => ({ ...prev, evolutionaryGenome: genome ?? undefined }))
+  }
+
   function handleStart() {
     if (!isValid) return
     startWithConfig(config)
@@ -98,7 +137,8 @@ export function SetupScreen() {
     }}>
       <div style={{
         background: '#1e293b', borderRadius: 12, padding: 32,
-        width: 420, maxWidth: '90vw', border: '1px solid #334155',
+        width: 520, maxWidth: '90vw', border: '1px solid #334155',
+        maxHeight: '90vh', overflow: 'auto',
       }}>
         <h2 style={{ color: '#e2e8f0', margin: '0 0 20px', fontSize: 20 }}>
           AI Colony Setup
@@ -112,6 +152,7 @@ export function SetupScreen() {
               ['utility', 'Utility AI'],
               ['bt', 'Behavior Tree'],
               ['goap', 'GOAP'],
+              ['evolutionary', 'Evolutionary'],
             ] as const).map(([key, label]) => (
               <label key={key} style={{
                 display: 'flex', alignItems: 'center', gap: 4,
@@ -128,11 +169,57 @@ export function SetupScreen() {
               </label>
             ))}
           </div>
-          {!isValid && (
+          {!validateAISelection(config.aiSelection) && (
             <div style={{ color: '#ef4444', fontSize: 11, marginTop: 4 }}>
               Select at least 2 AI systems
             </div>
           )}
+        </div>
+
+        {/* Evolutionary AI Training & Genome Selection */}
+        {config.aiSelection.evolutionary && (
+          <div style={{ ...SECTION_STYLE, background: '#0f172a', padding: 12, borderRadius: 8, border: '1px solid #334155' }}>
+            <span style={LABEL_STYLE}>Evolutionary AI Genome</span>
+            {selectedGenome ? (
+              <div style={{ color: '#4ade80', fontSize: 12, marginBottom: 8 }}>
+                Selected: Gen {selectedGenome.generation} | Fitness: {selectedGenome.fitness.toFixed(0)} | {selectedGenome.trainedBiome}
+              </div>
+            ) : (
+              <div style={{ color: '#f59e0b', fontSize: 12, marginBottom: 8 }}>
+                No genome selected. Train one or select from library.
+              </div>
+            )}
+            <button
+              onClick={handleStartTraining}
+              style={{
+                background: '#3b82f6',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 6,
+                padding: '6px 14px',
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: 600,
+                marginBottom: 8,
+              }}
+            >
+              Train New Genome
+            </button>
+            <GenomeLibrary
+              selectedGenomeId={selectedGenome?.id ?? null}
+              onSelect={handleGenomeSelect}
+              biomeFilter={config.biome}
+            />
+          </div>
+        )}
+
+        {/* Biome Selection */}
+        <div style={SECTION_STYLE}>
+          <span style={LABEL_STYLE}>Biome</span>
+          <BiomeSelector
+            value={config.biome}
+            onChange={(biome: BiomeType) => setConfig(prev => ({ ...prev, biome }))}
+          />
         </div>
 
         {/* World Size */}
@@ -271,6 +358,17 @@ export function SetupScreen() {
           Start Simulation
         </button>
       </div>
+
+      {/* Training Overlay */}
+      {showTraining && trainingState && (
+        <TrainingView
+          state={trainingState}
+          isTraining={isTraining}
+          onStop={stopTraining}
+          onClose={handleTrainingClose}
+          startTime={trainingStartTime.current}
+        />
+      )}
     </div>
   )
 }

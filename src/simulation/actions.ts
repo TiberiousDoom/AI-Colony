@@ -148,10 +148,18 @@ export const EAT_ACTION = makeAction(
   },
 )
 
-export const REST_ACTION = makeAction(
-  'rest', 3, 0,
-  () => true,
-  (v, _w, _s, _rng, campfire, ctx) => {
+export const REST_ACTION: ActionDefinition = {
+  type: 'rest',
+  duration: 3,
+  energyCostPerTick: 0,
+  getEffectiveDuration(ctx: TickContext): number {
+    // Base 2-4 ticks; vary by season (longer rest in winter due to cold)
+    if (ctx.season === 'winter') return 4
+    if (ctx.season === 'summer') return 2
+    return 3
+  },
+  canPerform: () => true,
+  complete(v, _w, _s, _rng, campfire, ctx) {
     const energy = getNeed(v, NeedType.Energy)
     const atCampfire = isAtOrAdjacent(v.position.x, v.position.y, campfire.x, campfire.y)
     const atShelter = isAtStructureType(v.position, ctx.structures, 'shelter')
@@ -174,7 +182,7 @@ export const REST_ACTION = makeAction(
       }
     }
   },
-)
+}
 
 export const CHOP_WOOD_ACTION = makeAction(
   'chop_wood', 4, 2,
@@ -301,6 +309,29 @@ export const WARM_UP_ACTION = makeAction(
   },
 )
 
+/** Cool down action (desert biome): replenished by shade/forest, wells, shelters */
+export const COOL_DOWN_ACTION = makeAction(
+  'cool_down', 2, 0,
+  (v) => v.needs.has(NeedType.Cooling),
+  (v, world, _s, _rng, _campfire, ctx) => {
+    const cooling = v.needs.get(NeedType.Cooling)
+    if (!cooling) return
+
+    const atShelter = isAtStructureType(v.position, ctx.structures, 'shelter')
+    const atWell = isAtStructureType(v.position, ctx.structures, 'well')
+    const atForest = isAdjacentToType(v.position.x, v.position.y, world, TileType.Forest)
+
+    if (atWell) {
+      cooling.current += 30
+    } else if (atShelter || atForest) {
+      cooling.current += 25
+    } else {
+      cooling.current += 15
+    }
+    clampNeed(cooling)
+  },
+)
+
 export const FLEE_ACTION = makeAction(
   'flee', 0, 2,
   () => true,
@@ -401,6 +432,7 @@ const ACTION_MAP = new Map<VillagerAction, ActionDefinition>([
   ['build_farm', BUILD_FARM_ACTION],
   ['build_wall', BUILD_WALL_ACTION],
   ['build_well', BUILD_WELL_ACTION],
+  ['cool_down', COOL_DOWN_ACTION],
 ])
 
 export function getActionDefinition(action: VillagerAction): ActionDefinition | undefined {

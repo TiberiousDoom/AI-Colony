@@ -34,7 +34,8 @@ describe('Actions', () => {
 
     it('does not affect indoor actions at night', () => {
       expect(EAT_ACTION.getEffectiveDuration(nightCtx)).toBe(1)
-      expect(REST_ACTION.getEffectiveDuration(nightCtx)).toBe(3)
+      // REST varies by season: 2 in summer (default), 3 in spring/autumn, 4 in winter
+      expect(REST_ACTION.getEffectiveDuration(nightCtx)).toBe(2)
       expect(IDLE_ACTION.getEffectiveDuration(nightCtx)).toBe(1)
     })
 
@@ -333,7 +334,7 @@ describe('Actions', () => {
       expect(getActionDefinition('idle')).toBe(IDLE_ACTION)
     })
 
-    it('getAllActions returns all 12 registered actions', () => {
+    it('getAllActions returns all 17 registered actions', () => {
       const actions = getAllActions()
       const types = actions.map(a => a.type)
       expect(types).toContain('forage')
@@ -352,7 +353,8 @@ describe('Actions', () => {
       expect(types).toContain('build_farm')
       expect(types).toContain('build_wall')
       expect(types).toContain('build_well')
-      expect(actions.length).toBe(16)
+      expect(types).toContain('cool_down')
+      expect(actions.length).toBe(17)
     })
   })
 })

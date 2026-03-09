@@ -3,7 +3,9 @@
  */
 
 import type { Villager } from '../simulation/villager.ts'
+import type { Genome } from '../simulation/ai/genome.ts'
 import { NeedBar } from './NeedBar.tsx'
+import { GenomeHeatmap } from './GenomeHeatmap.tsx'
 
 interface GOAPPlanDisplay {
   goal: string
@@ -19,6 +21,7 @@ interface VillagerInspectorProps {
   aiName: string
   scores?: Array<{ action: string; score: number; reason: string }>
   goapPlan?: GOAPPlanDisplay
+  genome?: Genome
   onClose: () => void
 }
 
@@ -27,9 +30,10 @@ const NEED_LABELS: Record<string, string> = {
   energy: 'Energy',
   health: 'Health',
   warmth: 'Warmth',
+  cooling: 'Cooling',
 }
 
-export function VillagerInspector({ villager, villageName, villageColor, aiName, scores, goapPlan, onClose }: VillagerInspectorProps) {
+export function VillagerInspector({ villager, villageName, villageColor, aiName, scores, goapPlan, genome, onClose }: VillagerInspectorProps) {
   return (
     <div
       data-testid="villager-inspector"
@@ -163,6 +167,14 @@ export function VillagerInspector({ villager, villageName, villageColor, aiName,
             </div>
           )}
         </div>
+
+        {/* Genome Heatmap (Evolutionary AI only) */}
+        {genome && (
+          <div style={{ flex: '1 1 280px', minWidth: 280 }}>
+            <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>Genome</div>
+            <GenomeHeatmap genome={genome} />
+          </div>
+        )}
       </div>
     </div>
   )

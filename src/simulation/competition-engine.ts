@@ -6,7 +6,8 @@
 import { createRNG, type SeededRNG } from '../utils/seed.ts'
 import { findPath } from '../utils/pathfinding.ts'
 import { calculateProsperity } from '../utils/scoring.ts'
-import { World } from './world.ts'
+import { World, TileType } from './world.ts'
+import { type BiomeType, getBiomeParams } from './biomes.ts'
 import {
   type Villager,
   type VillagerAction,
@@ -54,6 +55,7 @@ export interface CompetitionConfig {
   timeLimit?: number
   resourceMultiplier?: number
   eventFrequencyMultiplier?: number
+  biome?: BiomeType
 }
 
 export interface VillageState {
@@ -71,6 +73,7 @@ export interface VillageState {
   eliminationTick: number | null
   eliminationCause: string | null
   growthTimer: number
+  exhaustedResources?: Set<TileType>
 }
 
 export interface CompetitionState {
@@ -108,18 +111,22 @@ export class CompetitionEngine {
 
       this.villageRngs.set(vc.id, { ai: aiRng, action: actionRng, general: generalRng })
 
+      const biome = config.biome
       const world = new World({
         width: config.worldWidth,
         height: config.worldHeight,
         seed: config.seed,
+        biome,
       })
 
+      const hasCooling = biome ? getBiomeParams(biome).hasCoolingNeed : false
       const spawnRng = villageRng.fork()
       const villagers = createStartingVillagers(
         vc.villagerCount,
         world.campfirePosition.x,
         world.campfirePosition.y,
         spawnRng,
+        hasCooling,
       )
 
       return {
@@ -229,18 +236,22 @@ export class CompetitionEngine {
 
       this.villageRngs.set(vc.id, { ai: aiRng, action: actionRng, general: generalRng })
 
+      const resetBiome = c.biome
       const world = new World({
         width: c.worldWidth,
         height: c.worldHeight,
         seed: c.seed,
+        biome: resetBiome,
       })
 
+      const hasCoolingReset = resetBiome ? getBiomeParams(resetBiome).hasCoolingNeed : false
       const spawnRng = villageRng.fork()
       const villagers = createStartingVillagers(
         vc.villagerCount,
         world.campfirePosition.x,
         world.campfirePosition.y,
         spawnRng,
+        hasCoolingReset,
       )
 
       return {
@@ -302,9 +313,14 @@ export class CompetitionEngine {
     }
 
     // Needs drain
+    const biomeParams = this.state.config.biome ? getBiomeParams(this.state.config.biome) : undefined
     for (const villager of village.villagers) {
       if (!villager.alive) continue
-      tickNeeds(villager, this.state.season)
+      tickNeeds(villager, this.state.season, biomeParams ? {
+        permanentWinter: biomeParams.permanentWinter,
+        hasCoolingNeed: biomeParams.hasCoolingNeed,
+        isDaytime: this.state.timeOfDay === 'day',
+      } : undefined)
     }
 
     // Action progress
@@ -489,8 +505,12 @@ export class CompetitionEngine {
       }
     }
 
-    // Farm food production (spring/summer only)
-    if (this.state.season === 'spring' || this.state.season === 'summer') {
+    // Farm food production (spring/summer only; tundra: spring only)
+    const farmBiome = this.state.config.biome ? getBiomeParams(this.state.config.biome) : undefined
+    const farmSeasonOk = farmBiome?.shortGrowingSeason
+      ? this.state.season === 'spring'
+      : (this.state.season === 'spring' || this.state.season === 'summer')
+    if (farmSeasonOk) {
       for (const village of this.state.villages) {
         if (village.isEliminated) continue
         const farmFood = getFarmFoodProduction(village.structures)
@@ -505,6 +525,19 @@ export class CompetitionEngine {
     for (const village of this.state.villages) {
       if (village.isEliminated) continue
       this.checkPopulationGrowth(village)
+    }
+
+    // Resource exhaustion detection (once per type per village)
+    for (const village of this.state.villages) {
+      if (village.isEliminated) continue
+      if (!village.exhaustedResources) village.exhaustedResources = new Set()
+      for (const resType of [TileType.Forest, TileType.Stone] as const) {
+        if (!village.exhaustedResources.has(resType) && village.world.isResourceExhausted(resType)) {
+          village.exhaustedResources.add(resType)
+          this.addVillageEvent(village, 'resource_exhaustion',
+            `All ${resType} resources have been depleted!`)
+        }
+      }
     }
 
     // Victory lap countdown
@@ -585,10 +618,12 @@ export class CompetitionEngine {
         if (village.growthTimer >= threshold) {
           const id = `villager-${village.villagers.length}`
           const name = `Villager ${village.villagers.length + 1}`
+          const growthBiome = this.state.config.biome ? getBiomeParams(this.state.config.biome) : undefined
           const v = createVillager(
             id, name,
             village.campfirePosition.x + rngs.general.nextInt(-POPULATION.SPAWN_OFFSET, POPULATION.SPAWN_OFFSET),
             village.campfirePosition.y + rngs.general.nextInt(-POPULATION.SPAWN_OFFSET, POPULATION.SPAWN_OFFSET),
+            growthBiome?.hasCoolingNeed,
           )
           village.villagers.push(v)
           this.addVillageEvent(village, 'birth', `${name} has joined the village!`)

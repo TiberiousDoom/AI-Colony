@@ -19,7 +19,7 @@ export enum NeedType {
   Energy = 'energy',
   Health = 'health',
   Warmth = 'warmth',
-  // Cooling = 'cooling',  // Phase 5
+  Cooling = 'cooling',
 }
 
 export interface NeedState {
@@ -54,6 +54,7 @@ export type VillagerAction =
   | 'build_farm'
   | 'build_wall'
   | 'build_well'
+  | 'cool_down'
 
 // --- Villager ---
 
@@ -107,21 +108,24 @@ const VILLAGER_NAMES = [
 
 // --- Factory ---
 
-function createDefaultNeeds(): NeedsMap {
+function createDefaultNeeds(hasCoolingNeed?: boolean): NeedsMap {
   const needs: NeedsMap = new Map()
   needs.set(NeedType.Hunger, { current: NEEDS.INITIAL_VALUE, drainRate: NEEDS.HUNGER_DRAIN, min: 0, max: NEEDS.MAX_VALUE })
   needs.set(NeedType.Energy, { current: NEEDS.INITIAL_VALUE, drainRate: NEEDS.ENERGY_DRAIN, min: 0, max: NEEDS.MAX_VALUE })
   needs.set(NeedType.Health, { current: NEEDS.INITIAL_VALUE, drainRate: NEEDS.HEALTH_DRAIN, min: 0, max: NEEDS.MAX_VALUE })
   needs.set(NeedType.Warmth, { current: NEEDS.INITIAL_VALUE, drainRate: NEEDS.WARMTH_DRAIN, min: 0, max: NEEDS.MAX_VALUE })
+  if (hasCoolingNeed) {
+    needs.set(NeedType.Cooling, { current: NEEDS.COOLING_INITIAL, drainRate: NEEDS.COOLING_DRAIN, min: 0, max: NEEDS.MAX_VALUE })
+  }
   return needs
 }
 
-export function createVillager(id: string, name: string, x: number, y: number): Villager {
+export function createVillager(id: string, name: string, x: number, y: number, hasCoolingNeed?: boolean): Villager {
   return {
     id,
     name,
     position: { x, y },
-    needs: createDefaultNeeds(),
+    needs: createDefaultNeeds(hasCoolingNeed),
     currentAction: 'idle',
     actionTicksRemaining: 0,
     targetPosition: null,
@@ -140,6 +144,7 @@ export function createStartingVillagers(
   cx: number,
   cy: number,
   rng: SeededRNG,
+  hasCoolingNeed?: boolean,
 ): Villager[] {
   const names = [...VILLAGER_NAMES]
   rng.shuffle(names)
@@ -154,6 +159,7 @@ export function createStartingVillagers(
         names[i % names.length],
         cx + offsetX,
         cy + offsetY,
+        hasCoolingNeed,
       ),
     )
   }
@@ -184,7 +190,13 @@ export function clampNeed(need: NeedState): void {
  * Apply base need drain for one tick and handle starvation/exposure/recovery.
  * Season defaults to 'summer' for backward compatibility with Phase 1 tests.
  */
-export function tickNeeds(villager: Villager, season: Season = 'summer'): void {
+export interface TickNeedsOptions {
+  permanentWinter?: boolean
+  hasCoolingNeed?: boolean
+  isDaytime?: boolean
+}
+
+export function tickNeeds(villager: Villager, season: Season = 'summer', opts?: TickNeedsOptions): void {
   if (!villager.alive) return
 
   const hunger = getNeed(villager, NeedType.Hunger)
@@ -199,9 +211,26 @@ export function tickNeeds(villager: Villager, season: Season = 'summer'): void {
   hunger.current -= hunger.drainRate * illnessMultiplier
   energy.current -= energy.drainRate * illnessMultiplier
 
-  // Warmth drain in winter
-  if (season === 'winter') {
+  // Warmth drain in winter (or always for tundra permanent winter)
+  const coldActive = season === 'winter' || opts?.permanentWinter
+  if (coldActive) {
     warmth.current -= NEEDS.WINTER_WARMTH_DRAIN * illnessMultiplier
+  }
+
+  // Desert cooling: drains during daytime, replenished by shade/well/shelter
+  if (opts?.hasCoolingNeed) {
+    const cooling = villager.needs.get(NeedType.Cooling)
+    if (cooling) {
+      if (opts.isDaytime !== false) {
+        cooling.current -= NEEDS.COOLING_DRAIN * illnessMultiplier
+      }
+      // Heat stroke damage when cooling depleted
+      if (cooling.current <= 0) {
+        cooling.current = 0
+        health.current -= NEEDS.HEAT_STROKE_DAMAGE
+      }
+      clampNeed(cooling)
+    }
   }
 
   // Starvation damage
@@ -210,8 +239,16 @@ export function tickNeeds(villager: Villager, season: Season = 'summer'): void {
     health.current -= NEEDS.STARVATION_DAMAGE
   }
 
-  // Exposure damage (warmth depleted during winter)
-  if (warmth.current <= 0 && season === 'winter') {
+  // Energy collapse: at 0 energy, force villager to stop and rest
+  if (energy.current <= 0) {
+    energy.current = 0
+    villager.currentAction = 'idle'
+    villager.actionTicksRemaining = 0
+    villager.path = []
+  }
+
+  // Exposure damage (warmth depleted during cold)
+  if (warmth.current <= 0 && coldActive) {
     warmth.current = 0
     health.current -= NEEDS.EXPOSURE_DAMAGE
   }
