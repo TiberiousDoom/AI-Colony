@@ -5,8 +5,9 @@
 
 import type { SeededRNG } from '../../utils/seed.ts'
 import type { IAISystem, AIDecision, AIWorldView } from './ai-interface.ts'
-import type { Villager, VillagerAction } from '../villager.ts'
+import type { Villager, VillagerAction, Position } from '../villager.ts'
 import { NeedType, getNeed } from '../villager.ts'
+import { TileType } from '../world.ts'
 import { getAllActions } from '../actions.ts'
 import { type Genome, ACTION_LIST } from './genome.ts'
 
@@ -37,6 +38,100 @@ function isSurvivalAction(action: VillagerAction): boolean {
 /** Whether an action helps stockpile resources */
 function isStockpileAction(action: VillagerAction): boolean {
   return action === 'forage' || action === 'chop_wood' || action === 'mine_stone' || action === 'fish' || action === 'haul'
+}
+
+/** Find a target position for actions that require the villager to be somewhere specific */
+function findTargetForAction(action: VillagerAction, villager: Readonly<Villager>, worldView: AIWorldView): Position | undefined {
+  switch (action) {
+    case 'forage':
+    case 'chop_wood': {
+      const tiles = worldView.world.findTilesInRadius(
+        villager.position.x, villager.position.y, 15,
+        t => t.type === TileType.Forest && t.resourceAmount > 0,
+      )
+      if (tiles.length === 0) return undefined
+      tiles.sort((a, b) => {
+        const da = Math.abs(a.x - villager.position.x) + Math.abs(a.y - villager.position.y)
+        const db = Math.abs(b.x - villager.position.x) + Math.abs(b.y - villager.position.y)
+        return da - db
+      })
+      return { x: tiles[0].x, y: tiles[0].y }
+    }
+    case 'mine_stone': {
+      const tiles = worldView.world.findTilesInRadius(
+        villager.position.x, villager.position.y, 15,
+        t => t.type === TileType.Stone && t.resourceAmount > 0,
+      )
+      if (tiles.length === 0) return undefined
+      tiles.sort((a, b) => {
+        const da = Math.abs(a.x - villager.position.x) + Math.abs(a.y - villager.position.y)
+        const db = Math.abs(b.x - villager.position.x) + Math.abs(b.y - villager.position.y)
+        return da - db
+      })
+      return { x: tiles[0].x, y: tiles[0].y }
+    }
+    case 'fish': {
+      const waterTiles = worldView.world.findTilesInRadius(
+        villager.position.x, villager.position.y, 15,
+        t => t.type === TileType.Water,
+      )
+      const candidates: Position[] = []
+      for (const wt of waterTiles) {
+        const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]]
+        for (const [dx, dy] of dirs) {
+          if (worldView.world.isPassable(wt.x + dx, wt.y + dy)) {
+            candidates.push({ x: wt.x + dx, y: wt.y + dy })
+          }
+        }
+      }
+      if (candidates.length === 0) return undefined
+      candidates.sort((a, b) => {
+        const da = Math.abs(a.x - villager.position.x) + Math.abs(a.y - villager.position.y)
+        const db = Math.abs(b.x - villager.position.x) + Math.abs(b.y - villager.position.y)
+        return da - db
+      })
+      return candidates[0]
+    }
+    case 'eat':
+    case 'rest':
+    case 'haul':
+    case 'build_shelter':
+    case 'build_storage':
+    case 'build_watchtower':
+    case 'build_wall':
+    case 'build_well':
+    case 'warm_up':
+    case 'cool_down':
+      return { ...worldView.campfirePosition }
+    case 'build_farm': {
+      const fertile = worldView.world.findTilesInRadius(
+        villager.position.x, villager.position.y, 15,
+        t => t.type === TileType.FertileSoil,
+      )
+      if (fertile.length === 0) return worldView.campfirePosition
+      fertile.sort((a, b) => {
+        const da = Math.abs(a.x - villager.position.x) + Math.abs(a.y - villager.position.y)
+        const db = Math.abs(b.x - villager.position.x) + Math.abs(b.y - villager.position.y)
+        return da - db
+      })
+      return { x: fertile[0].x, y: fertile[0].y }
+    }
+    case 'flee': {
+      const predator = worldView.activeEvents.find(e => e.type === 'predator')
+      if (predator) {
+        const px = worldView.campfirePosition.x + predator.relativePosition.dx
+        const py = worldView.campfirePosition.y + predator.relativePosition.dy
+        const dx = villager.position.x - px
+        const dy = villager.position.y - py
+        const targetX = Math.max(0, Math.min(worldView.world.width - 1, villager.position.x + Math.sign(dx) * 8))
+        const targetY = Math.max(0, Math.min(worldView.world.height - 1, villager.position.y + Math.sign(dy) * 8))
+        return { x: targetX, y: targetY }
+      }
+      return { ...worldView.campfirePosition }
+    }
+    default:
+      return undefined
+  }
 }
 
 export class EvolutionaryAI implements IAISystem {
@@ -157,8 +252,11 @@ export class EvolutionaryAI implements IAISystem {
     scored.sort((a, b) => b.score - a.score)
     const best = scored[0] ?? { action: 'idle' as VillagerAction, score: 0, reason: 'fallback' }
 
+    const targetPosition = findTargetForAction(best.action, villager, worldView)
+
     return {
       action: best.action,
+      targetPosition,
       reason: `Evo(gen${this.genome.generation}): ${best.action} [${best.score.toFixed(2)}]`,
       scores: scored.map(s => ({ action: s.action, score: s.score, reason: s.reason })),
     }
