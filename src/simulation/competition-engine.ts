@@ -28,7 +28,7 @@ import type { Structure } from './structures.ts'
 import { type StructureType, getStockpileCap, getShelterCapacity, createStructure, getFarmFoodProduction, getWatchtowerDetectionBonus, hasWall } from './structures.ts'
 import { EventScheduler, type RandomEvent, resolveEventPosition } from './events.ts'
 import {
-  TICKS_PER_DAY, DAY_TICKS, DAYS_PER_SEASON, SNAPSHOT_INTERVAL, SNAPSHOTS_PER_DAY,
+  TICKS_PER_DAY, DAY_TICKS, DAYS_PER_SEASON, SNAPSHOT_INTERVAL,
   type SimulationHistory, type SimulationEvent, type SimulationEventType,
 } from './simulation-engine.ts'
 import { COMPETITION, EVENTS as EVENT_CONST, POPULATION } from '../config/game-constants.ts'
