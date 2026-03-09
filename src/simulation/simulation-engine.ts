@@ -26,13 +26,14 @@ import type { IAISystem, AIWorldView } from './ai/ai-interface.ts'
 import type { Structure } from './structures.ts'
 import { getStockpileCap, getShelterCapacity, createStructure } from './structures.ts'
 import { EventScheduler, type RandomEvent, resolveEventPosition } from './events.ts'
+import { TIMING, COMPETITION, EVENTS as EVENT_CONST, POPULATION } from '../config/game-constants.ts'
 
 // --- Constants ---
 
-export const TICKS_PER_DAY = 30
-export const DAY_TICKS = 20
-export const NIGHT_TICKS = 10
-export const DAYS_PER_SEASON = 7
+export const TICKS_PER_DAY = TIMING.TICKS_PER_DAY
+export const DAY_TICKS = TIMING.DAY_TICKS
+export const NIGHT_TICKS = TIMING.NIGHT_TICKS
+export const DAYS_PER_SEASON = TIMING.DAYS_PER_SEASON
 
 const SEASONS: Season[] = ['spring', 'summer', 'autumn', 'winter']
 
@@ -239,7 +240,7 @@ export class SimulationEngine {
       if (!villager.alive) continue
       if (villager.path.length > 0) {
         // Flee: 2× movement speed
-        const steps = villager.currentAction === 'flee' ? 2 : 1
+        const steps = villager.currentAction === 'flee' ? COMPETITION.FLEE_SPEED_MULTIPLIER : 1
         for (let i = 0; i < steps && villager.path.length > 0; i++) {
           const next = villager.path.shift()!
           villager.position.x = next.x
@@ -398,8 +399,8 @@ export class SimulationEngine {
       this.addEvent('season_change', `${this.state.season.charAt(0).toUpperCase() + this.state.season.slice(1)} has arrived`)
     }
 
-    // Random events (grace period: no events before day 5)
-    if (this.state.dayCount >= 5) {
+    // Random events (grace period)
+    if (this.state.dayCount >= EVENT_CONST.GRACE_PERIOD_DAYS) {
       const event = this.eventScheduler.checkForEvent(this.state.dayCount, this.state.season)
       if (event) {
         this.state.activeEvents.push(event)
@@ -416,20 +417,18 @@ export class SimulationEngine {
     const alive = this.state.villagers.filter(v => v.alive).length
     const shelterCap = getShelterCapacity(this.state.structures)
 
-    if (this.state.stockpile.food > 50 && alive < shelterCap && shelterCap > 0) {
+    if (this.state.stockpile.food > POPULATION.GROWTH_FOOD_THRESHOLD && alive < shelterCap && shelterCap > 0) {
       this.growthTimer++
-      if (this.growthTimer >= 12) {
-        // RNG for 12-15 range
-        const threshold = 12 + this.rng.nextInt(0, 3)
+      if (this.growthTimer >= POPULATION.GROWTH_TIMER_BASE) {
+        const threshold = POPULATION.GROWTH_TIMER_BASE + this.rng.nextInt(0, POPULATION.GROWTH_TIMER_VARIANCE)
         if (this.growthTimer >= threshold) {
-          // Spawn new villager
           const id = `villager-${this.state.villagers.length}`
           const name = `Villager ${this.state.villagers.length + 1}`
           const v = createVillager(
             id,
             name,
-            this.state.campfirePosition.x + this.rng.nextInt(-2, 2),
-            this.state.campfirePosition.y + this.rng.nextInt(-2, 2),
+            this.state.campfirePosition.x + this.rng.nextInt(-POPULATION.SPAWN_OFFSET, POPULATION.SPAWN_OFFSET),
+            this.state.campfirePosition.y + this.rng.nextInt(-POPULATION.SPAWN_OFFSET, POPULATION.SPAWN_OFFSET),
           )
           this.state.villagers.push(v)
           this.addEvent('birth', `${name} has joined the village!`)
@@ -462,7 +461,7 @@ export class SimulationEngine {
           if (!villager.alive) continue
           const warmth = villager.needs.get(NeedType.Warmth)
           if (warmth && this.state.season !== 'winter') {
-            warmth.current -= 3
+            warmth.current -= EVENT_CONST.COLD_SNAP_SEVERITY
             clampNeed(warmth)
           }
         }
