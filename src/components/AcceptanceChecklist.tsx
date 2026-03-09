@@ -22,12 +22,14 @@ const PHASE_LABELS: Record<Phase, string> = {
   1: 'Phase 1 — Simulation Core',
   2: 'Phase 2 — Competition & Advanced Systems',
   3: 'Phase 3 — Visual Rendering',
+  4: 'Phase 4 — GOAP AI & Content',
 }
 
 const PHASE_COLORS: Record<Phase, string> = {
   1: '#3b82f6',
   2: '#8b5cf6',
   3: '#f59e0b',
+  4: '#10b981',
 }
 
 export function AcceptanceChecklist({ onClose }: { onClose: () => void }) {

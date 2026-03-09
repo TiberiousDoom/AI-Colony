@@ -30,6 +30,10 @@ const ACTION_TO_ANIM: Record<VillagerAction, string> = {
   mine_stone: 'work',
   build_shelter: 'work',
   build_storage: 'work',
+  build_watchtower: 'work',
+  build_farm: 'work',
+  build_wall: 'work',
+  build_well: 'work',
   warm_up: 'rest',
   flee: 'flee',
 }

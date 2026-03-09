@@ -2,7 +2,7 @@
  * GOAP world state snapshot: reads actual game state into boolean predicates.
  */
 
-import type { Villager, Position } from '../villager.ts'
+import type { Villager } from '../villager.ts'
 import { NeedType, getNeed } from '../villager.ts'
 import { TileType } from '../world.ts'
 import type { AIWorldView } from './ai-interface.ts'
@@ -52,9 +52,9 @@ export function snapshotWorldState(villager: Readonly<Villager>, worldView: AIWo
     at_water: isAdjacentToTileType(vx, vy, worldView, TileType.Water),
     at_fertile: isAdjacentToTileType(vx, vy, worldView, TileType.FertileSoil),
 
-    has_food: villager.carrying?.type === 'food' ?? false,
-    has_wood: villager.carrying?.type === 'wood' ?? false,
-    has_stone: villager.carrying?.type === 'stone' ?? false,
+    has_food: villager.carrying?.type === 'food',
+    has_wood: villager.carrying?.type === 'wood',
+    has_stone: villager.carrying?.type === 'stone',
     carrying_any: villager.carrying !== null,
 
     stockpile_has_food: worldView.stockpile.food > 0,
