@@ -20,14 +20,6 @@ export function TrainingView({ state, isTraining, onStop, onClose, startTime }: 
     fitness,
   }))
 
-  // Estimated time remaining
-  const elapsed = (Date.now() - startTime) / 1000
-  const timePerGen = state.generation > 0 ? elapsed / state.generation : 0
-  const remaining = state.fitnessHistory.length > 0
-    ? Math.max(0, timePerGen * (state.fitnessHistory.length < state.generation
-      ? 0 : (chartData.length > 0 ? state.generation : 0)))
-    : 0
-
   const progressPct = state.generation > 0
     ? Math.round((state.generation / Math.max(state.generation, chartData.length + 1)) * 100)
     : 0

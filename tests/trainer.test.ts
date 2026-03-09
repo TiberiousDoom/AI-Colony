@@ -73,7 +73,7 @@ describe('Trainer', () => {
       seed: 42,
       worldSize: 'small',
       biome: 'temperate',
-    }, rng)
+    }, 42)
 
     expect(result.nextPopulation.length).toBe(4)
     expect(result.bestFitness).toBeTypeOf('number')
@@ -95,7 +95,7 @@ describe('Trainer', () => {
       seed: 42,
       worldSize: 'small',
       biome: 'temperate',
-    }, rng)
+    }, 42)
 
     expect(result.bestFitness).toBeGreaterThanOrEqual(0)
   })

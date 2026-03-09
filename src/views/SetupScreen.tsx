@@ -78,7 +78,6 @@ export function SetupScreen() {
 
   const { trainingState, isTraining, startTraining, stopTraining, trainedGenome } = useTraining()
 
-  const aiCount = [config.aiSelection.utility, config.aiSelection.bt, config.aiSelection.goap, config.aiSelection.evolutionary].filter(Boolean).length
   const isValid = validateAISelection(config.aiSelection) &&
     (!config.aiSelection.evolutionary || selectedGenome !== null)
 

@@ -6,7 +6,6 @@
 import { useRef, useEffect } from 'react'
 import type { Genome } from '../simulation/ai/genome.ts'
 import { ACTION_LIST } from '../simulation/ai/genome.ts'
-import { NeedType } from '../simulation/villager.ts'
 
 const NEED_LABELS = ['Hunger', 'Energy', 'Health', 'Warmth', 'Cooling']
 

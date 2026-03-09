@@ -35,6 +35,7 @@ const ACTION_TO_ANIM: Record<VillagerAction, string> = {
   build_wall: 'work',
   build_well: 'work',
   warm_up: 'rest',
+  cool_down: 'rest',
   flee: 'flee',
 }
 

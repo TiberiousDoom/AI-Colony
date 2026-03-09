@@ -9,7 +9,7 @@ import { GOAPAI } from '../simulation/ai/goap-ai.ts'
 import { EvolutionaryAI } from '../simulation/ai/evolutionary-ai.ts'
 import type { Genome } from '../simulation/ai/genome.ts'
 import type { BiomeType } from '../simulation/biomes.ts'
-import { POPULATION, STOCKPILE } from './game-constants.ts'
+import { POPULATION } from './game-constants.ts'
 
 export type WorldSize = 'small' | 'medium' | 'large'
 export type ResourceLevel = 'scarce' | 'normal' | 'abundant'

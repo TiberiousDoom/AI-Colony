@@ -30,10 +30,10 @@ describe('getDefaultGameConfig', () => {
 
 describe('validateAISelection', () => {
   it('requires at least 2 AIs', () => {
-    expect(validateAISelection({ utility: true, bt: true, goap: false })).toBe(true)
-    expect(validateAISelection({ utility: true, bt: true, goap: true })).toBe(true)
-    expect(validateAISelection({ utility: true, bt: false, goap: false })).toBe(false)
-    expect(validateAISelection({ utility: false, bt: false, goap: false })).toBe(false)
+    expect(validateAISelection({ utility: true, bt: true, goap: false, evolutionary: false })).toBe(true)
+    expect(validateAISelection({ utility: true, bt: true, goap: true, evolutionary: false })).toBe(true)
+    expect(validateAISelection({ utility: true, bt: false, goap: false, evolutionary: false })).toBe(false)
+    expect(validateAISelection({ utility: false, bt: false, goap: false, evolutionary: false })).toBe(false)
   })
 })
 
@@ -66,7 +66,7 @@ describe('buildCompetitionConfig', () => {
 
   it('filters out disabled AIs', () => {
     const gc = getDefaultGameConfig()
-    gc.aiSelection = { utility: true, bt: false, goap: true }
+    gc.aiSelection = { utility: true, bt: false, goap: true, evolutionary: false }
     const cc = buildCompetitionConfig(gc)
     expect(cc.villages).toHaveLength(2)
     expect(cc.villages.map(v => v.id)).toEqual(['utility', 'goap'])
@@ -106,7 +106,7 @@ describe('encodeConfigString / decodeConfigString', () => {
     const gc = getDefaultGameConfig()
     gc.seed = 12345
     gc.worldSize = 'small'
-    gc.aiSelection = { utility: true, bt: false, goap: true }
+    gc.aiSelection = { utility: true, bt: false, goap: true, evolutionary: false }
     gc.startingVillagers = 15
     gc.startingResources = 'abundant'
     gc.eventFrequency = 'calm'

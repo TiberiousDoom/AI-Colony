@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand'
-import { CompetitionEngine, type CompetitionState, type CompetitionConfig } from '../simulation/competition-engine.ts'
+import { CompetitionEngine, type CompetitionState } from '../simulation/competition-engine.ts'
 import {
   type GameConfig, getDefaultGameConfig, buildCompetitionConfig,
 } from '../config/game-config.ts'
