@@ -32,17 +32,20 @@ export function resolveEventPosition(event: RandomEvent, campfire: Position): Po
 export class EventScheduler {
   private rng: SeededRNG
   private daysSinceLastEvent: number = 0
+  private frequencyMultiplier: number
 
-  constructor(rng: SeededRNG) {
+  constructor(rng: SeededRNG, frequencyMultiplier: number = 1.0) {
     this.rng = rng
+    this.frequencyMultiplier = frequencyMultiplier
   }
 
   /** Check if a new event should fire this day. Returns event or null. */
   checkForEvent(dayCount: number, season: Season): RandomEvent | null {
     this.daysSinceLastEvent++
 
-    // Events fire every 5–10 days
-    const threshold = EVENTS.MIN_INTERVAL + this.rng.nextInt(0, EVENTS.INTERVAL_VARIANCE)
+    // Events fire every 5–10 days, scaled by frequency multiplier
+    const baseThreshold = EVENTS.MIN_INTERVAL + this.rng.nextInt(0, EVENTS.INTERVAL_VARIANCE)
+    const threshold = Math.round(baseThreshold * this.frequencyMultiplier)
     if (this.daysSinceLastEvent < threshold) return null
 
     this.daysSinceLastEvent = 0

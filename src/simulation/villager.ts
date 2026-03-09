@@ -160,8 +160,12 @@ export function createStartingVillagers(
   return villagers
 }
 
-export function createInitialStockpile(): VillageStockpile {
-  return { food: STOCKPILE.INITIAL_FOOD, wood: STOCKPILE.INITIAL_WOOD, stone: STOCKPILE.INITIAL_STONE }
+export function createInitialStockpile(resourceMultiplier: number = 1): VillageStockpile {
+  return {
+    food: Math.round(STOCKPILE.INITIAL_FOOD * resourceMultiplier),
+    wood: Math.round(STOCKPILE.INITIAL_WOOD * resourceMultiplier),
+    stone: Math.round(STOCKPILE.INITIAL_STONE * resourceMultiplier),
+  }
 }
 
 // --- Need Helpers ---

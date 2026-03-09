@@ -9,15 +9,31 @@ import './App.css'
 
 const SimulationView = lazy(() => import('./views/SimulationView.tsx').then(m => ({ default: m.SimulationView })))
 const ResultsSummary = lazy(() => import('./views/ResultsSummary.tsx').then(m => ({ default: m.ResultsSummary })))
+const SetupScreen = lazy(() => import('./views/SetupScreen.tsx').then(m => ({ default: m.SetupScreen })))
 
 function App() {
   const [showChecklist, setShowChecklist] = useState(false)
   const viewMode = useSimulationStore(s => s.viewMode)
+  const showSetup = useSimulationStore(s => s.showSetup)
 
   const keyboardCallbacks = useMemo(() => ({
     onEscape: () => setShowChecklist(false),
   }), [])
   useKeyboardShortcuts(keyboardCallbacks)
+
+  if (showSetup) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0f172a', color: '#94a3b8' }}>
+            Loading...
+          </div>
+        }>
+          <SetupScreen />
+        </Suspense>
+      </ErrorBoundary>
+    )
+  }
 
   return (
     <div className="app">

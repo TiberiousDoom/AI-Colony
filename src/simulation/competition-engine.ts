@@ -52,6 +52,8 @@ export interface CompetitionConfig {
   worldHeight: number
   villages: VillageConfig[]
   timeLimit?: number
+  resourceMultiplier?: number
+  eventFrequencyMultiplier?: number
 }
 
 export interface VillageState {
@@ -96,7 +98,7 @@ export class CompetitionEngine {
 
   constructor(config: CompetitionConfig) {
     this.rng = createRNG(config.seed)
-    this.eventScheduler = new EventScheduler(this.rng.fork())
+    this.eventScheduler = new EventScheduler(this.rng.fork(), config.eventFrequencyMultiplier)
 
     const villages: VillageState[] = config.villages.map(vc => {
       const villageRng = this.rng.fork()
@@ -125,7 +127,7 @@ export class CompetitionEngine {
         name: vc.name,
         world,
         villagers,
-        stockpile: createInitialStockpile(),
+        stockpile: createInitialStockpile(config.resourceMultiplier),
         structures: [],
         aiSystem: vc.aiSystem,
         campfirePosition: world.campfirePosition,
@@ -216,7 +218,7 @@ export class CompetitionEngine {
     const c = config ?? this.state.config
     // Reconstruct everything from scratch
     this.rng = createRNG(c.seed)
-    this.eventScheduler = new EventScheduler(this.rng.fork())
+    this.eventScheduler = new EventScheduler(this.rng.fork(), c.eventFrequencyMultiplier)
     this.villageRngs.clear()
 
     const villages: VillageState[] = c.villages.map(vc => {
@@ -246,7 +248,7 @@ export class CompetitionEngine {
         name: vc.name,
         world,
         villagers,
-        stockpile: createInitialStockpile(),
+        stockpile: createInitialStockpile(c.resourceMultiplier),
         structures: [],
         aiSystem: vc.aiSystem,
         campfirePosition: world.campfirePosition,
