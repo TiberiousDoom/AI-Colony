@@ -8,7 +8,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
 } from 'recharts'
 import { useSimulationStore } from '../store/simulation-store.ts'
-import { exportRunJSON, exportMetricsCSV, exportChartPNG, downloadBlob } from '../utils/export.ts'
+import { exportRunJSON, exportMetricsCSV, exportChartPNG, exportDiagnosticJSON, downloadBlob } from '../utils/export.ts'
 import { encodeConfigString } from '../config/game-config.ts'
 import type { CompetitionState, VillageState } from '../simulation/competition-engine.ts'
 import type { SimulationEvent } from '../simulation/simulation-engine.ts'
@@ -131,6 +131,11 @@ export function ResultsSummary() {
   const handleExportCSV = () => {
     const blob = exportMetricsCSV(compState)
     downloadBlob(blob, `ai-colony-metrics-${seed}.csv`)
+  }
+
+  const handleExportDiagnostic = () => {
+    const blob = exportDiagnosticJSON(compState)
+    downloadBlob(blob, `ai-colony-diagnostic-${seed}.json`)
   }
 
   const btnStyle: React.CSSProperties = {
@@ -296,6 +301,7 @@ export function ResultsSummary() {
         <button style={btnStyle} onClick={handleNewSeed}>New Seed</button>
         <button style={btnStyle} onClick={handleExportJSON}>Export JSON</button>
         <button style={btnStyle} onClick={handleExportCSV}>Export CSV</button>
+        <button style={btnStyle} onClick={handleExportDiagnostic}>Diagnostic Report</button>
         <button style={btnStyle} onClick={async () => {
           const blob = await exportChartPNG()
           if (blob) downloadBlob(blob, `ai-colony-chart-${gameConfig.seed}.png`)
