@@ -1,6 +1,10 @@
 /**
  * Zustand store: bridges the competition engine and the React UI.
  * Supports both single-village and dual-village (competition) modes.
+ *
+ * Uses setInterval + Date.now() delta tracking so the simulation keeps
+ * running even when the browser tab is in the background. A visibilitychange
+ * listener catches up on any ticks missed while the tab was fully suspended.
  */
 
 import { create } from 'zustand'
@@ -10,6 +14,8 @@ import {
 } from '../config/game-config.ts'
 
 const TICK_INTERVAL_MS = 1000 // 1 tick per second at 1x speed
+const SIM_LOOP_INTERVAL_MS = 50 // poll at ~20Hz; background tabs throttle to ~1Hz
+const MAX_CATCHUP_TICKS = 512 // cap ticks per callback to avoid freezing after long sleep
 
 interface SimulationStore {
   /** Current competition state */
@@ -42,17 +48,57 @@ interface SimulationStore {
 
 let engine: CompetitionEngine | null = null
 let intervalId: ReturnType<typeof setInterval> | null = null
-
-const SIM_LOOP_INTERVAL_MS = 50 // poll at ~20Hz; background tabs throttle to ~1Hz
+let lastTimestamp = 0
+let accumulator = 0
 
 function stopLoop() {
   if (intervalId !== null) {
     clearInterval(intervalId)
     intervalId = null
   }
+  lastTimestamp = 0
+  accumulator = 0
+}
+
+function publishState(set: (s: Partial<SimulationStore>) => void) {
+  if (!engine) return
+  const newState = engine.getState()
+  set({
+    competitionState: {
+      ...newState,
+      villages: newState.villages.map(v => ({
+        ...v,
+        history: { daily: [...v.history.daily] },
+        events: [...v.events],
+      })),
+      globalEvents: [...newState.globalEvents],
+    } as CompetitionState,
+  })
+
+  if (newState.isOver) {
+    set({ isRunning: false, viewMode: 'results' })
+    stopLoop()
+  }
 }
 
 export const useSimulationStore = create<SimulationStore>((set, get) => {
+  function processAccumulatedTicks(): boolean {
+    if (!engine) return false
+    let ticked = false
+    let tickCount = 0
+    while (accumulator >= TICK_INTERVAL_MS && tickCount < MAX_CATCHUP_TICKS) {
+      engine.tick()
+      accumulator -= TICK_INTERVAL_MS
+      ticked = true
+      tickCount++
+    }
+    // If we hit the cap, discard remaining accumulator to avoid perpetual catch-up
+    if (tickCount >= MAX_CATCHUP_TICKS) {
+      accumulator = 0
+    }
+    return ticked
+  }
+
   function gameLoop() {
     const store = get()
     if (!store.isRunning || !engine) {
@@ -60,34 +106,35 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
       return
     }
 
-    // Number of ticks to process this interval
-    const ticksPerInterval = Math.max(1, Math.round((SIM_LOOP_INTERVAL_MS * store.speed) / TICK_INTERVAL_MS))
-    // Cap to prevent runaway when tab returns from long sleep
-    const maxTicks = Math.min(ticksPerInterval, 32)
+    const now = Date.now()
+    if (lastTimestamp === 0) lastTimestamp = now
+    const delta = now - lastTimestamp
+    lastTimestamp = now
 
-    for (let i = 0; i < maxTicks; i++) {
-      engine.tick()
-    }
+    accumulator += delta * store.speed
 
-    const newState = engine.getState()
-    set({
-      competitionState: {
-        ...newState,
-        villages: newState.villages.map(v => ({
-          ...v,
-          history: { daily: [...v.history.daily] },
-          events: [...v.events],
-        })),
-        globalEvents: [...newState.globalEvents],
-      } as CompetitionState,
-    })
-
-    // Auto-pause when simulation ends -> switch to results view
-    if (newState.isOver) {
-      set({ isRunning: false, viewMode: 'results' })
-      stopLoop()
+    if (processAccumulatedTicks()) {
+      publishState(set)
     }
   }
+
+  // When the tab becomes visible again, immediately run a catch-up tick.
+  // Some browsers fully suspend setInterval for background tabs, so the
+  // interval callback may not have fired at all while hidden.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      const store = get()
+      if (store.isRunning && engine && lastTimestamp > 0) {
+        const now = Date.now()
+        const delta = now - lastTimestamp
+        lastTimestamp = now
+        accumulator += delta * store.speed
+        if (processAccumulatedTicks()) {
+          publishState(set)
+        }
+      }
+    }
+  })
 
   const defaultConfig = getDefaultGameConfig()
 
