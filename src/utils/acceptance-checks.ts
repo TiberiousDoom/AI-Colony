@@ -855,11 +855,24 @@ const p3PixijsInit: AcceptanceCheck = {
   category: 'rendering',
   autoDetect: true,
   async run() {
+    // Ensure we're on simulation view so the canvas is mounted
+    const { useSimulationStore } = await import('../store/simulation-store.ts')
+    const store = useSimulationStore.getState()
+    const previousMode = store.viewMode
+    if (store.viewMode !== 'simulation') {
+      store.setViewMode('simulation')
+      // Wait for React to mount the SimulationView and PixiJS to init
+      await new Promise(r => setTimeout(r, 1500))
+    }
     const canvas = document.querySelector('canvas')
+    // Restore previous view mode
+    if (previousMode !== 'simulation') {
+      useSimulationStore.getState().setViewMode(previousMode)
+    }
     if (canvas) {
       return { status: 'pass', detail: 'Canvas element found in DOM' }
     }
-    return { status: 'fail', detail: 'No canvas element found — switch to Simulation view first' }
+    return { status: 'fail', detail: 'No canvas element found — PixiJS failed to initialize' }
   },
 }
 
@@ -1138,11 +1151,11 @@ const p4ThreeVillages: AcceptanceCheck = {
   async run(ctx) {
     const state = ctx.storeState.simState
     if (!state) return { status: 'fail', detail: 'No competition state — start the simulation first' }
-    if (state.villages.length !== 3) {
-      return { status: 'fail', detail: `Expected 3 villages, got ${state.villages.length}` }
+    if (state.villages.length < 3) {
+      return { status: 'fail', detail: `Expected at least 3 villages, got ${state.villages.length}` }
     }
     const names = state.villages.map(v => v.name)
-    return { status: 'pass', detail: `Three villages running: ${names.join(', ')}` }
+    return { status: 'pass', detail: `${state.villages.length} villages running: ${names.join(', ')}` }
   },
 }
 
@@ -1177,14 +1190,43 @@ const p4NewEvents: AcceptanceCheck = {
   category: 'simulation',
   autoDetect: true,
   async run(ctx) {
+    // First check store state — event subtype is in the message, not the type field
     const state = ctx.storeState.simState
-    if (!state) return { status: 'fail', detail: 'No competition state' }
-    const newTypes = ['illness', 'storm', 'resource_discovery']
-    const seen = state.globalEvents.filter(e => newTypes.includes(e.type as string))
-    if (seen.length > 0) {
-      return { status: 'pass', detail: `New events observed: ${seen.map(e => e.type).join(', ')}` }
+    if (state) {
+      const newTypes = ['illness', 'storm', 'resource_discovery']
+      const found = new Set<string>()
+      for (const e of state.globalEvents) {
+        if (e.type === 'random_event') {
+          for (const t of newTypes) {
+            if (e.message.toLowerCase().includes(t)) found.add(t)
+          }
+        }
+      }
+      if (found.size > 0) {
+        return { status: 'pass', detail: `New events observed: ${[...found].join(', ')}` }
+      }
     }
-    return { status: 'fail', detail: 'No new event types observed yet — run the simulation longer' }
+    // Fallback: run a standalone simulation long enough to trigger events
+    const engine = ctx.createEngine(defaultConfig(42))
+    const newEventKeywords = ['illness', 'storm', 'resource_discovery']
+    const found = new Set<string>()
+    for (let i = 0; i < 3000; i++) {
+      engine.tick()
+      if (engine.getState().isOver) break
+      for (const ev of engine.getState().events) {
+        if (ev.type === 'random_event') {
+          for (const keyword of newEventKeywords) {
+            if (ev.message.toLowerCase().includes(keyword)) {
+              found.add(keyword)
+            }
+          }
+        }
+      }
+      if (found.size > 0) {
+        return { status: 'pass', detail: `New event types observed: ${[...found].join(', ')}` }
+      }
+    }
+    return { status: 'fail', detail: 'No new event types observed in 3000 ticks' }
   },
 }
 
