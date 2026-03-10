@@ -57,7 +57,7 @@ export function snapshotWorldState(villager: Readonly<Villager>, worldView: AIWo
     has_stone: villager.carrying?.type === 'stone',
     carrying_any: villager.carrying !== null,
 
-    stockpile_has_food: worldView.stockpile.food > 0,
+    stockpile_has_food: worldView.stockpile.food >= 5,
     stockpile_has_wood: worldView.stockpile.wood > 0,
     stockpile_has_stone: worldView.stockpile.stone > 0,
     stockpile_food_low: worldView.stockpile.food < 30,

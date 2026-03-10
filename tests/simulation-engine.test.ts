@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { SimulationEngine, TICKS_PER_DAY, DAY_TICKS, SNAPSHOT_INTERVAL } from '../src/simulation/simulation-engine.ts'
 import { UtilityAI } from '../src/simulation/ai/utility-ai.ts'
 import type { SimulationConfig } from '../src/simulation/simulation-engine.ts'
+import { NeedType, getNeed } from '../src/simulation/villager.ts'
 
 function makeConfig(overrides?: Partial<SimulationConfig>): SimulationConfig {
   return {
@@ -142,14 +143,21 @@ describe('SimulationEngine', () => {
     it('game ends when all villagers die', () => {
       const engine = new SimulationEngine(makeConfig({ villagerCount: 10 }))
 
-      // Run enough ticks for starvation to occur
+      // Drain stockpile and kill villagers by zeroing food + health directly
+      const state = engine.getState()
+      state.stockpile.food = 0
+      for (const v of state.villagers) {
+        getNeed(v, NeedType.Hunger).current = 0
+        getNeed(v, NeedType.Health).current = 5
+      }
+
+      // Run enough ticks for remaining health to drain (starvation does 1 dmg/tick)
       let ticks = 0
-      while (!engine.getState().isOver && ticks < 3000) {
+      while (!engine.getState().isOver && ticks < 500) {
         engine.tick()
         ticks++
       }
 
-      // With 10 villagers and limited food (50 initial), they should eventually starve
       expect(engine.getState().isOver).toBe(true)
       expect(engine.getState().villagers.filter(v => v.alive).length).toBe(0)
     })
@@ -157,20 +165,26 @@ describe('SimulationEngine', () => {
     it('does not tick after game over', () => {
       const engine = new SimulationEngine(makeConfig({ villagerCount: 10 }))
 
-      // Run until game ends
+      // Force quick death
+      const state = engine.getState()
+      state.stockpile.food = 0
+      for (const v of state.villagers) {
+        getNeed(v, NeedType.Hunger).current = 0
+        getNeed(v, NeedType.Health).current = 5
+      }
+
       let ticks = 0
-      while (!engine.getState().isOver && ticks < 3000) {
+      while (!engine.getState().isOver && ticks < 500) {
         engine.tick()
         ticks++
       }
 
-      // Ensure game actually ended
       expect(engine.getState().isOver).toBe(true)
 
       const tickBefore = engine.getState().tick
       engine.tick()
       expect(engine.getState().tick).toBe(tickBefore) // no change
-    }, 15000)
+    })
   })
 
   describe('reset', () => {
