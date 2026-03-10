@@ -268,11 +268,12 @@ export class EvolutionaryAI implements IAISystem {
         }
       }
 
-      // Winter warmth emergency
+      // Winter warmth emergency — must warm up before warmth drops critically
       if (actionType === 'warm_up' && worldView.season === 'winter') {
         const warmth = villager.needs.get(NeedType.Warmth)
-        if (warmth && warmth.current < 20) {
-          score += Math.max(0.5, envW[3])
+        if (warmth && warmth.current < 40) {
+          const warmthBonus = warmth.current < 20 ? 1.5 : 1.0
+          score += Math.max(warmthBonus, envW[3])
         }
       }
 
