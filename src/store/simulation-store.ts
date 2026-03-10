@@ -41,29 +41,32 @@ interface SimulationStore {
 }
 
 let engine: CompetitionEngine | null = null
-let animFrameId: number | null = null
+let intervalId: ReturnType<typeof setInterval> | null = null
 let lastTimestamp = 0
 let accumulator = 0
 
+const SIM_LOOP_INTERVAL_MS = 50 // poll at ~20Hz; background tabs throttle to ~1Hz
+
 function stopLoop() {
-  if (animFrameId !== null) {
-    cancelAnimationFrame(animFrameId)
-    animFrameId = null
+  if (intervalId !== null) {
+    clearInterval(intervalId)
+    intervalId = null
   }
 }
 
 export const useSimulationStore = create<SimulationStore>((set, get) => {
-  function gameLoop(timestamp: number) {
+  function gameLoop() {
     const store = get()
     if (!store.isRunning || !engine) {
-      animFrameId = null
+      stopLoop()
       return
     }
 
-    if (lastTimestamp === 0) lastTimestamp = timestamp
+    const now = Date.now()
+    if (lastTimestamp === 0) lastTimestamp = now
 
-    const delta = timestamp - lastTimestamp
-    lastTimestamp = timestamp
+    const delta = now - lastTimestamp
+    lastTimestamp = now
 
     accumulator += delta * store.speed
 
@@ -73,7 +76,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
       accumulator -= TICK_INTERVAL_MS
       ticked = true
 
-      // Safety: don't process more than 16 ticks per frame
+      // Safety: don't process more than 16 ticks per interval
       if (accumulator >= TICK_INTERVAL_MS * 16) {
         accumulator = 0
         break
@@ -101,8 +104,6 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
         return
       }
     }
-
-    animFrameId = requestAnimationFrame(gameLoop)
   }
 
   const defaultConfig = getDefaultGameConfig()
@@ -132,7 +133,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
       lastTimestamp = 0
       accumulator = 0
       set({ isRunning: true })
-      animFrameId = requestAnimationFrame(gameLoop)
+      intervalId = setInterval(gameLoop, SIM_LOOP_INTERVAL_MS)
     },
 
     pause() {
@@ -182,7 +183,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
         showSetup: false,
         viewMode: 'metrics',
       })
-      animFrameId = requestAnimationFrame(gameLoop)
+      intervalId = setInterval(gameLoop, SIM_LOOP_INTERVAL_MS)
     },
 
     showSetupScreen() {
