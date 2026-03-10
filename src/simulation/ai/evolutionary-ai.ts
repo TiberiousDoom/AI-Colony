@@ -189,7 +189,12 @@ export class EvolutionaryAI implements IAISystem {
         const need = villager.needs.get(needType)
         if (!need) continue
 
-        const urgency = urgencyCurve(need.current)
+        // Warmth urgency only matters in winter (matches Utility AI behavior)
+        // Outside winter, warmth doesn't drain, so urgency would be noise
+        const urgency = needType === NeedType.Warmth && worldView.season !== 'winter'
+          ? 0
+          : urgencyCurve(need.current)
+
         const weightIdx = actionIdx * this.genome.needCount + needIdx
         const weight = this.genome.actionWeights[weightIdx] ?? 0
         const contribution = weight * urgency
@@ -216,14 +221,18 @@ export class EvolutionaryAI implements IAISystem {
 
       // [2] Low food modifier
       if (worldView.stockpile.food < 10 && isGatherAction(actionType)) {
-        score += envW[2]
+        score += Math.max(0.3, envW[2])
       }
 
       // [3] Emergency modifier (low health or energy)
+      // Hardcoded minimum of 0.5 ensures survival instincts regardless of genome
       const health = getNeed(villager as Villager, NeedType.Health)
       const energy = getNeed(villager as Villager, NeedType.Energy)
-      if ((health.current < 20 || energy.current < 15) && isSurvivalAction(actionType)) {
-        score += envW[3]
+      if (health.current < 20 && isSurvivalAction(actionType)) {
+        score += Math.max(0.5, envW[3])
+      }
+      if (energy.current < 15 && actionType === 'rest') {
+        score += Math.max(0.5, envW[3])
       }
 
       // [4] Autumn stockpiling modifier
@@ -236,6 +245,28 @@ export class EvolutionaryAI implements IAISystem {
         Math.abs(villager.position.x - campfire.x) <= 2 &&
         Math.abs(villager.position.y - campfire.y) <= 2) {
         score += envW[5] * 0.3
+      }
+
+      // Predator flee: hardcoded response like Utility AI
+      if (actionType === 'flee') {
+        const predator = worldView.activeEvents.find(e => e.type === 'predator')
+        if (predator) {
+          const px = campfire.x + predator.relativePosition.dx
+          const py = campfire.y + predator.relativePosition.dy
+          const dist = Math.abs(villager.position.x - px) + Math.abs(villager.position.y - py)
+          if (dist <= 5) {
+            score += 2.0
+            parts.push('predator +2.0')
+          }
+        }
+      }
+
+      // Winter warmth emergency
+      if (actionType === 'warm_up' && worldView.season === 'winter') {
+        const warmth = villager.needs.get(NeedType.Warmth)
+        if (warmth && warmth.current < 20) {
+          score += Math.max(0.5, envW[3])
+        }
       }
 
       // Small random noise
