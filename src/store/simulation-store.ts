@@ -41,68 +41,53 @@ interface SimulationStore {
 }
 
 let engine: CompetitionEngine | null = null
-let animFrameId: number | null = null
-let lastTimestamp = 0
-let accumulator = 0
+let intervalId: ReturnType<typeof setInterval> | null = null
 
 function stopLoop() {
-  if (animFrameId !== null) {
-    cancelAnimationFrame(animFrameId)
-    animFrameId = null
+  if (intervalId !== null) {
+    clearInterval(intervalId)
+    intervalId = null
   }
 }
 
 export const useSimulationStore = create<SimulationStore>((set, get) => {
-  function gameLoop(timestamp: number) {
+  // Interval-based loop: runs even when the tab is in the background
+  const LOOP_INTERVAL_MS = 50 // 20 Hz update rate
+
+  function gameLoop() {
     const store = get()
     if (!store.isRunning || !engine) {
-      animFrameId = null
+      stopLoop()
       return
     }
 
-    if (lastTimestamp === 0) lastTimestamp = timestamp
+    // Number of ticks to process this interval
+    const ticksPerInterval = Math.max(1, Math.round((LOOP_INTERVAL_MS * store.speed) / TICK_INTERVAL_MS))
+    // Cap to prevent runaway when tab returns from long sleep
+    const maxTicks = Math.min(ticksPerInterval, 32)
 
-    const delta = timestamp - lastTimestamp
-    lastTimestamp = timestamp
-
-    accumulator += delta * store.speed
-
-    let ticked = false
-    while (accumulator >= TICK_INTERVAL_MS) {
+    for (let i = 0; i < maxTicks; i++) {
       engine.tick()
-      accumulator -= TICK_INTERVAL_MS
-      ticked = true
-
-      // Safety: don't process more than 16 ticks per frame
-      if (accumulator >= TICK_INTERVAL_MS * 16) {
-        accumulator = 0
-        break
-      }
     }
 
-    if (ticked) {
-      const newState = engine.getState()
-      set({
-        competitionState: {
-          ...newState,
-          villages: newState.villages.map(v => ({
-            ...v,
-            history: { daily: [...v.history.daily] },
-            events: [...v.events],
-          })),
-          globalEvents: [...newState.globalEvents],
-        } as CompetitionState,
-      })
+    const newState = engine.getState()
+    set({
+      competitionState: {
+        ...newState,
+        villages: newState.villages.map(v => ({
+          ...v,
+          history: { daily: [...v.history.daily] },
+          events: [...v.events],
+        })),
+        globalEvents: [...newState.globalEvents],
+      } as CompetitionState,
+    })
 
-      // Auto-pause when simulation ends -> switch to results view
-      if (newState.isOver) {
-        set({ isRunning: false, viewMode: 'results' })
-        stopLoop()
-        return
-      }
+    // Auto-pause when simulation ends -> switch to results view
+    if (newState.isOver) {
+      set({ isRunning: false, viewMode: 'results' })
+      stopLoop()
     }
-
-    animFrameId = requestAnimationFrame(gameLoop)
   }
 
   const defaultConfig = getDefaultGameConfig()
@@ -129,10 +114,9 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
       if (!engine) {
         store.init(store.seed)
       }
-      lastTimestamp = 0
-      accumulator = 0
+      stopLoop()
       set({ isRunning: true })
-      animFrameId = requestAnimationFrame(gameLoop)
+      intervalId = setInterval(gameLoop, LOOP_INTERVAL_MS)
     },
 
     pause() {
@@ -172,8 +156,6 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
       stopLoop()
       const competitionConfig = buildCompetitionConfig(config)
       engine = new CompetitionEngine(competitionConfig)
-      lastTimestamp = 0
-      accumulator = 0
       set({
         gameConfig: config,
         seed: config.seed,
@@ -182,7 +164,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
         showSetup: false,
         viewMode: 'metrics',
       })
-      animFrameId = requestAnimationFrame(gameLoop)
+      intervalId = setInterval(gameLoop, LOOP_INTERVAL_MS)
     },
 
     showSetupScreen() {
