@@ -12,6 +12,7 @@ import {
 } from '../utils/acceptance-checks.ts'
 import { SimulationEngine, type SimulationConfig } from '../simulation/simulation-engine.ts'
 import { useSimulationStore } from '../store/simulation-store.ts'
+import { downloadBlob } from '../utils/export.ts'
 
 interface CheckState {
   status: CheckStatus
@@ -85,6 +86,46 @@ export function AcceptanceChecklist({ onClose }: { onClose: () => void }) {
     setIsRunning(false)
   }, [runCheck, activePhase])
 
+  const exportResults = useCallback(() => {
+    const checks = ALL_CHECKS.filter(c =>
+      c.autoDetect && (activePhase === 'all' || c.phase === activePhase)
+    )
+    const data = {
+      exportedAt: new Date().toISOString(),
+      phase: activePhase,
+      summary: {
+        total: checks.length,
+        passed: checks.filter(c => results.get(c.id)?.status === 'pass').length,
+        failed: checks.filter(c => results.get(c.id)?.status === 'fail').length,
+        pending: checks.filter(c => !results.has(c.id) || results.get(c.id)?.status === 'pending').length,
+      },
+      checks: checks.map(c => {
+        const result = results.get(c.id)
+        return {
+          id: c.id,
+          phase: c.phase,
+          category: c.category,
+          label: c.label,
+          description: c.description,
+          status: result?.status ?? 'pending',
+          detail: result?.detail ?? null,
+        }
+      }),
+      byPhase: ([1, 2, 3, 4, 5] as Phase[]).map(phase => {
+        const phaseChecks = checks.filter(c => c.phase === phase)
+        return {
+          phase,
+          label: PHASE_LABELS[phase],
+          total: phaseChecks.length,
+          passed: phaseChecks.filter(c => results.get(c.id)?.status === 'pass').length,
+          failed: phaseChecks.filter(c => results.get(c.id)?.status === 'fail').length,
+        }
+      }).filter(p => p.total > 0),
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    downloadBlob(blob, `acceptance-results-${new Date().toISOString().slice(0, 10)}.json`)
+  }, [results, activePhase])
+
   const statusIcon = (status: CheckStatus): string => {
     switch (status) {
       case 'pass': return '\u2705'
@@ -149,6 +190,21 @@ export function AcceptanceChecklist({ onClose }: { onClose: () => void }) {
             }}
           >
             {isRunning ? 'Running...' : 'Run All'}
+          </button>
+          <button
+            onClick={exportResults}
+            disabled={results.size === 0}
+            style={{
+              padding: '4px 12px',
+              background: results.size === 0 ? '#475569' : '#1e293b',
+              color: results.size === 0 ? '#64748b' : '#e2e8f0',
+              border: '1px solid #475569',
+              borderRadius: 4,
+              cursor: results.size === 0 ? 'default' : 'pointer',
+              fontSize: 12,
+            }}
+          >
+            Export
           </button>
           <button
             onClick={onClose}
