@@ -225,21 +225,21 @@ export class EvolutionaryAI implements IAISystem {
       }
 
       // [3] Emergency modifier (low health or energy)
-      // Hardcoded minimum of 0.5 ensures survival instincts regardless of genome
+      // Hardcoded minimums ensure survival instincts regardless of genome
       const health = getNeed(villager as Villager, NeedType.Health)
       const energy = getNeed(villager as Villager, NeedType.Energy)
       const hunger = getNeed(villager as Villager, NeedType.Hunger)
-      if (health.current < 20 && isSurvivalAction(actionType)) {
-        score += Math.max(0.5, envW[3])
+      if (health.current < 30 && isSurvivalAction(actionType)) {
+        score += Math.max(0.8, envW[3])
       }
-      if (energy.current < 15 && actionType === 'rest') {
-        score += Math.max(0.5, envW[3])
+      if (energy.current < 25 && actionType === 'rest') {
+        score += Math.max(0.8, envW[3])
       }
-      if (hunger.current < 20 && actionType === 'eat') {
-        score += Math.max(0.5, envW[3])
+      if (hunger.current < 35 && actionType === 'eat') {
+        score += Math.max(1.0, envW[3])
       }
-      if (hunger.current < 20 && isGatherAction(actionType) && worldView.stockpile.food < 5) {
-        score += Math.max(0.3, envW[3] * 0.5)
+      if (hunger.current < 35 && isGatherAction(actionType) && worldView.stockpile.food < 10) {
+        score += Math.max(0.6, envW[3] * 0.5)
       }
 
       // [4] Autumn stockpiling modifier

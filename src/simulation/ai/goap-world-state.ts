@@ -68,6 +68,14 @@ export function snapshotWorldState(villager: Readonly<Villager>, worldView: AIWo
     health_satisfied: health.current > 50,
     warmth_satisfied: worldView.season !== 'winter' || warmth.current > 50,
 
+    needs_building: (() => {
+      const pop = worldView.villagers.filter(v => v.alive).length
+      const shelterCount = worldView.structures.filter(s => s.type === 'shelter').length
+      if (pop > shelterCount * 3) return true
+      if (!worldView.structures.some(s => s.type === 'storage')) return true
+      return false
+    })(),
+
     predator_nearby: predatorNearby,
     is_sick: (villager as Villager).statusEffects?.some(e => e.type === 'illness') ?? false,
   }

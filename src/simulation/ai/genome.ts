@@ -42,13 +42,31 @@ export function getGenomeSize(needCount: number): number {
   return NUM_ACTIONS * needCount + NUM_ENV_WEIGHTS
 }
 
-/** Create a random genome with weights in [0, 1] */
+/** Create a random genome with weights in [0, 1].
+ *  Survival-critical actions (eat, rest) get a minimum floor so random
+ *  genomes don't starve before evolution can select for survival. */
 export function createRandomGenome(rng: SeededRNG, needCount: number, biome: BiomeType): Genome {
   const actionWeights = new Float32Array(NUM_ACTIONS * needCount)
   const envWeights = new Float32Array(NUM_ENV_WEIGHTS)
 
+  // Indices of survival-critical actions in ACTION_LIST
+  const eatIdx = ACTION_LIST.indexOf('eat')       // 2
+  const restIdx = ACTION_LIST.indexOf('rest')      // 3
+  const forageIdx = ACTION_LIST.indexOf('forage')  // 1
+
   for (let i = 0; i < actionWeights.length; i++) {
-    actionWeights[i] = rng.next()
+    const actionIdx = Math.floor(i / needCount)
+    let w = rng.next()
+    // Ensure eat/rest/forage weights have a minimum floor for the hunger need (index 0)
+    const needIdx = i % needCount
+    if (actionIdx === eatIdx && needIdx === 0) {
+      w = Math.max(0.6, w) // eat × hunger weight always >= 0.6
+    } else if (actionIdx === restIdx && needIdx === 1) {
+      w = Math.max(0.5, w) // rest × energy weight always >= 0.5
+    } else if (actionIdx === forageIdx && needIdx === 0) {
+      w = Math.max(0.4, w) // forage × hunger weight always >= 0.4
+    }
+    actionWeights[i] = w
   }
   for (let i = 0; i < envWeights.length; i++) {
     envWeights[i] = rng.next()

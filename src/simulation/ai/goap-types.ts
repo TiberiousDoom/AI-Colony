@@ -33,6 +33,9 @@ export interface GOAPWorldState {
   health_satisfied: boolean
   warmth_satisfied: boolean
 
+  // Infrastructure
+  needs_building: boolean
+
   // Situational
   predator_nearby: boolean
   is_sick: boolean
