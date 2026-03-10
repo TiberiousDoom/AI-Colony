@@ -8,6 +8,8 @@ import { getNeed, NeedType } from '../simulation/villager.ts'
 const VILLAGE_COLORS: Record<string, string> = {
   utility: '#3b82f6',
   bt: '#f97316',
+  goap: '#10b981',
+  evolutionary: '#a855f7',
 }
 
 interface QuickCompareProps {

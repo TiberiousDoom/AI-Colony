@@ -12,9 +12,30 @@ import { useToastStore } from './store/toast-store.ts'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.ts'
 import './App.css'
 
-const SimulationView = lazy(() => import('./views/SimulationView.tsx').then(m => ({ default: m.SimulationView })))
-const ResultsSummary = lazy(() => import('./views/ResultsSummary.tsx').then(m => ({ default: m.ResultsSummary })))
-const SetupScreen = lazy(() => import('./views/SetupScreen.tsx').then(m => ({ default: m.SetupScreen })))
+/** Retry a dynamic import once on failure (handles stale chunk 404s after redeploy) */
+function lazyRetry<T extends Record<string, unknown>>(
+  factory: () => Promise<T>,
+  pick: (m: T) => { default: React.ComponentType },
+): React.LazyExoticComponent<React.ComponentType> {
+  return lazy(() =>
+    factory()
+      .then(pick)
+      .catch(() => {
+        // Chunk 404 — likely a stale deployment. Reload once to get fresh asset manifest.
+        const key = 'chunk-retry-reloaded'
+        if (!sessionStorage.getItem(key)) {
+          sessionStorage.setItem(key, '1')
+          window.location.reload()
+        }
+        // If we already reloaded, surface the error
+        return factory().then(pick)
+      }),
+  )
+}
+
+const SimulationView = lazyRetry(() => import('./views/SimulationView.tsx'), m => ({ default: m.SimulationView }))
+const ResultsSummary = lazyRetry(() => import('./views/ResultsSummary.tsx'), m => ({ default: m.ResultsSummary }))
+const SetupScreen = lazyRetry(() => import('./views/SetupScreen.tsx'), m => ({ default: m.SetupScreen }))
 
 function App() {
   const [showChecklist, setShowChecklist] = useState(false)
