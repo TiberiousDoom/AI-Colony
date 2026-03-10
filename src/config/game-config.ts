@@ -109,7 +109,7 @@ export function buildCompetitionConfig(gc: GameConfig): CompetitionConfig {
     timeLimit: gc.timeLimit ?? undefined,
     resourceMultiplier: RESOURCE_MULTIPLIER[gc.startingResources],
     eventFrequencyMultiplier: EVENT_FREQUENCY_MULTIPLIER[gc.eventFrequency],
-    biome: gc.biome !== 'temperate' ? gc.biome : undefined,
+    biome: gc.biome,
   }
 }
 

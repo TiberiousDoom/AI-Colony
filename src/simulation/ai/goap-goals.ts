@@ -61,7 +61,7 @@ export const GOAP_GOALS: GOAPGoal[] = [
   },
   {
     name: 'BuildInfrastructure',
-    desiredState: {},
+    desiredState: { needs_building: false },
     priority: (_v, wv) => {
       // Low priority: only when basic needs met and resources available
       const pop = wv.villagers.filter(v => v.alive).length

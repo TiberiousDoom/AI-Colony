@@ -189,7 +189,7 @@ export const GOAP_ACTIONS: GOAPAction[] = [
   {
     name: 'BuildShelter',
     preconditions: {},
-    effects: {},
+    effects: { needs_building: false },
     cost: 7,
     villagerAction: 'build_shelter',
     targetFinder: campfireTarget,
@@ -198,7 +198,7 @@ export const GOAP_ACTIONS: GOAPAction[] = [
   {
     name: 'BuildStorage',
     preconditions: {},
-    effects: {},
+    effects: { needs_building: false },
     cost: 7,
     villagerAction: 'build_storage',
     targetFinder: campfireTarget,
@@ -207,7 +207,7 @@ export const GOAP_ACTIONS: GOAPAction[] = [
   {
     name: 'BuildWatchtower',
     preconditions: {},
-    effects: {},
+    effects: { needs_building: false },
     cost: 9,
     villagerAction: 'build_watchtower',
     targetFinder: campfireTarget,
@@ -216,7 +216,7 @@ export const GOAP_ACTIONS: GOAPAction[] = [
   {
     name: 'BuildFarm',
     preconditions: {},
-    effects: {},
+    effects: { needs_building: false },
     cost: 7,
     villagerAction: 'build_farm',
     targetFinder: findNearestFertile,
@@ -225,7 +225,7 @@ export const GOAP_ACTIONS: GOAPAction[] = [
   {
     name: 'BuildWall',
     preconditions: {},
-    effects: {},
+    effects: { needs_building: false },
     cost: 5,
     villagerAction: 'build_wall',
     targetFinder: campfireTarget,
@@ -234,7 +234,7 @@ export const GOAP_ACTIONS: GOAPAction[] = [
   {
     name: 'BuildWell',
     preconditions: {},
-    effects: {},
+    effects: { needs_building: false },
     cost: 9,
     villagerAction: 'build_well',
     targetFinder: campfireTarget,
