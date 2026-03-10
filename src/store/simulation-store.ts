@@ -43,6 +43,8 @@ interface SimulationStore {
 let engine: CompetitionEngine | null = null
 let intervalId: ReturnType<typeof setInterval> | null = null
 
+const SIM_LOOP_INTERVAL_MS = 50 // poll at ~20Hz; background tabs throttle to ~1Hz
+
 function stopLoop() {
   if (intervalId !== null) {
     clearInterval(intervalId)
@@ -51,9 +53,6 @@ function stopLoop() {
 }
 
 export const useSimulationStore = create<SimulationStore>((set, get) => {
-  // Interval-based loop: runs even when the tab is in the background
-  const LOOP_INTERVAL_MS = 50 // 20 Hz update rate
-
   function gameLoop() {
     const store = get()
     if (!store.isRunning || !engine) {
@@ -62,7 +61,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
     }
 
     // Number of ticks to process this interval
-    const ticksPerInterval = Math.max(1, Math.round((LOOP_INTERVAL_MS * store.speed) / TICK_INTERVAL_MS))
+    const ticksPerInterval = Math.max(1, Math.round((SIM_LOOP_INTERVAL_MS * store.speed) / TICK_INTERVAL_MS))
     // Cap to prevent runaway when tab returns from long sleep
     const maxTicks = Math.min(ticksPerInterval, 32)
 
@@ -116,7 +115,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
       }
       stopLoop()
       set({ isRunning: true })
-      intervalId = setInterval(gameLoop, LOOP_INTERVAL_MS)
+      intervalId = setInterval(gameLoop, SIM_LOOP_INTERVAL_MS)
     },
 
     pause() {
@@ -164,7 +163,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
         showSetup: false,
         viewMode: 'metrics',
       })
-      intervalId = setInterval(gameLoop, LOOP_INTERVAL_MS)
+      intervalId = setInterval(gameLoop, SIM_LOOP_INTERVAL_MS)
     },
 
     showSetupScreen() {
