@@ -1190,13 +1190,20 @@ const p4NewEvents: AcceptanceCheck = {
   category: 'simulation',
   autoDetect: true,
   async run(ctx) {
-    // First check store state
+    // First check store state — event subtype is in the message, not the type field
     const state = ctx.storeState.simState
     if (state) {
       const newTypes = ['illness', 'storm', 'resource_discovery']
-      const seen = state.globalEvents.filter(e => newTypes.includes(e.type as string))
-      if (seen.length > 0) {
-        return { status: 'pass', detail: `New events observed: ${seen.map(e => e.type).join(', ')}` }
+      const found = new Set<string>()
+      for (const e of state.globalEvents) {
+        if (e.type === 'random_event') {
+          for (const t of newTypes) {
+            if (e.message.toLowerCase().includes(t)) found.add(t)
+          }
+        }
+      }
+      if (found.size > 0) {
+        return { status: 'pass', detail: `New events observed: ${[...found].join(', ')}` }
       }
     }
     // Fallback: run a standalone simulation long enough to trigger events
