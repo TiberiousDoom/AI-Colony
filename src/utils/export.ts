@@ -4,6 +4,8 @@
  */
 
 import type { CompetitionState } from '../simulation/competition-engine.ts'
+import { getNeed, NeedType } from '../simulation/villager.ts'
+import { TIMING } from '../config/game-constants.ts'
 
 /** Export full competition state as JSON */
 export function exportRunJSON(state: CompetitionState): Blob {
@@ -29,6 +31,96 @@ export function exportRunJSON(state: CompetitionState): Blob {
       events: v.events,
     })),
     globalEvents: state.globalEvents,
+  }
+  return new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+}
+
+/** Export detailed diagnostic report for debugging AI behavior */
+export function exportDiagnosticJSON(state: CompetitionState): Blob {
+  const data = {
+    exportedAt: new Date().toISOString(),
+    seed: state.config.seed,
+    biome: state.config.biome,
+    dayCount: state.dayCount,
+    season: state.season,
+    winner: state.winner,
+    globalEvents: state.globalEvents,
+    villages: state.villages.map(v => {
+      const alive = v.villagers.filter(vl => vl.alive)
+      const dead = v.villagers.filter(vl => !vl.alive)
+
+      return {
+        id: v.id,
+        name: v.name,
+        aiType: v.aiSystem.name,
+        isEliminated: v.isEliminated,
+        eliminationTick: v.eliminationTick,
+        eliminationDay: v.eliminationTick !== null ? Math.floor(v.eliminationTick / TIMING.TICKS_PER_DAY) : null,
+        eliminationCause: v.eliminationCause,
+
+        // Current state
+        populationAlive: alive.length,
+        populationDead: dead.length,
+        stockpile: v.stockpile,
+        structures: v.structures.map(s => s.type),
+
+        // Per-villager diagnostics
+        villagers: v.villagers.map(vl => {
+          const needs: Record<string, number> = {}
+          for (const [type, need] of vl.needs) {
+            needs[type] = Math.round(need.current * 10) / 10
+          }
+          return {
+            name: vl.name,
+            alive: vl.alive,
+            position: vl.position,
+            currentAction: vl.currentAction,
+            needs,
+            statusEffects: vl.statusEffects.map(e => e.type),
+            lastDecision: vl.lastDecision?.reason ?? null,
+          }
+        }),
+
+        // Death timeline: when and likely why each villager died
+        deathTimeline: v.events
+          .filter(e => e.type === 'death')
+          .map(e => ({
+            day: e.day,
+            tick: e.tick,
+            message: e.message,
+            // Find what was happening around the death
+            nearbyEvents: v.events
+              .filter(ne => Math.abs(ne.tick - e.tick) <= TIMING.TICKS_PER_DAY && ne.type !== 'death')
+              .map(ne => ({ day: ne.day, type: ne.type, message: ne.message })),
+          })),
+
+        // Snapshot history with health/hunger/energy details
+        snapshotSummary: v.history.daily.map(snap => ({
+          day: Math.round(snap.day * 10) / 10,
+          season: snap.season,
+          population: snap.population,
+          prosperity: Math.round(snap.prosperityScore),
+          food: Math.round(snap.food),
+          wood: Math.round(snap.wood),
+          stone: Math.round(snap.stone),
+          avgHealth: Math.round(snap.avgHealth),
+          avgHunger: Math.round(snap.avgHunger),
+          avgEnergy: Math.round(snap.avgEnergy),
+          topActivity: Object.entries(snap.activityBreakdown)
+            .filter(([, count]) => count > 0)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 3)
+            .map(([action, count]) => `${action}:${count}`),
+        })),
+
+        // All village events (compact)
+        eventLog: v.events.map(e => ({
+          day: e.day,
+          type: e.type,
+          message: e.message,
+        })),
+      }
+    }),
   }
   return new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
 }

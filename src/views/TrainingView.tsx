@@ -22,8 +22,8 @@ export function TrainingView({ state, isTraining, onStop, onClose, startTime }: 
 
   const elapsed = (Date.now() - startTime) / 1000
 
-  const progressPct = state.generation > 0
-    ? Math.round((state.generation / Math.max(state.generation, chartData.length + 1)) * 100)
+  const progressPct = state.generationsMax > 0
+    ? Math.round((state.generation / state.generationsMax) * 100)
     : 0
 
   return (
