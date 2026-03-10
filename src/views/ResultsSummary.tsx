@@ -8,7 +8,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
 } from 'recharts'
 import { useSimulationStore } from '../store/simulation-store.ts'
-import { exportRunJSON, exportMetricsCSV, exportChartPNG, exportDiagnosticJSON, downloadBlob } from '../utils/export.ts'
+import { exportRunJSON, exportMetricsCSV, exportChartPNG, exportDiagnosticText, downloadBlob } from '../utils/export.ts'
 import { encodeConfigString } from '../config/game-config.ts'
 import type { CompetitionState, VillageState } from '../simulation/competition-engine.ts'
 import type { SimulationEvent } from '../simulation/simulation-engine.ts'
@@ -134,8 +134,8 @@ export function ResultsSummary() {
   }
 
   const handleExportDiagnostic = () => {
-    const blob = exportDiagnosticJSON(compState)
-    downloadBlob(blob, `ai-colony-diagnostic-${seed}.json`)
+    const blob = exportDiagnosticText(compState)
+    downloadBlob(blob, `ai-colony-diagnostic-${seed}.txt`)
   }
 
   const btnStyle: React.CSSProperties = {
