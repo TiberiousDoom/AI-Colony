@@ -34,94 +34,123 @@ export function exportRunJSON(state: CompetitionState): Blob {
   return new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
 }
 
-/** Export detailed diagnostic report for debugging AI behavior */
-export function exportDiagnosticJSON(state: CompetitionState): Blob {
-  const data = {
-    exportedAt: new Date().toISOString(),
-    seed: state.config.seed,
-    biome: state.config.biome,
-    dayCount: state.dayCount,
-    season: state.season,
-    winner: state.winner,
-    globalEvents: state.globalEvents,
-    villages: state.villages.map(v => {
-      const alive = v.villagers.filter(vl => vl.alive)
-      const dead = v.villagers.filter(vl => !vl.alive)
+/** Export detailed diagnostic report as human-readable text */
+export function exportDiagnosticText(state: CompetitionState): Blob {
+  const lines: string[] = []
+  const hr = '='.repeat(72)
+  const hr2 = '-'.repeat(72)
 
-      return {
-        id: v.id,
-        name: v.name,
-        aiType: v.aiSystem.name,
-        isEliminated: v.isEliminated,
-        eliminationTick: v.eliminationTick,
-        eliminationDay: v.eliminationTick !== null ? Math.floor(v.eliminationTick / TIMING.TICKS_PER_DAY) : null,
-        eliminationCause: v.eliminationCause,
+  lines.push(hr)
+  lines.push('AI COLONY — DIAGNOSTIC REPORT')
+  lines.push(hr)
+  lines.push(`Exported:  ${new Date().toISOString()}`)
+  lines.push(`Seed:      ${state.config.seed}`)
+  lines.push(`Biome:     ${state.config.biome}`)
+  lines.push(`Day:       ${state.dayCount}`)
+  lines.push(`Season:    ${state.season}`)
+  lines.push(`Winner:    ${state.winner ?? 'none'}`)
+  lines.push('')
 
-        // Current state
-        populationAlive: alive.length,
-        populationDead: dead.length,
-        stockpile: v.stockpile,
-        structures: v.structures.map(s => s.type),
-
-        // Per-villager diagnostics
-        villagers: v.villagers.map(vl => {
-          const needs: Record<string, number> = {}
-          for (const [type, need] of vl.needs) {
-            needs[type] = Math.round(need.current * 10) / 10
-          }
-          return {
-            name: vl.name,
-            alive: vl.alive,
-            position: vl.position,
-            currentAction: vl.currentAction,
-            needs,
-            statusEffects: vl.statusEffects.map(e => e.type),
-            lastDecision: vl.lastDecision?.reason ?? null,
-          }
-        }),
-
-        // Death timeline: when and likely why each villager died
-        deathTimeline: v.events
-          .filter(e => e.type === 'death')
-          .map(e => ({
-            day: e.day,
-            tick: e.tick,
-            message: e.message,
-            // Find what was happening around the death
-            nearbyEvents: v.events
-              .filter(ne => Math.abs(ne.tick - e.tick) <= TIMING.TICKS_PER_DAY && ne.type !== 'death')
-              .map(ne => ({ day: ne.day, type: ne.type, message: ne.message })),
-          })),
-
-        // Snapshot history with health/hunger/energy details
-        snapshotSummary: v.history.daily.map(snap => ({
-          day: Math.round(snap.day * 10) / 10,
-          season: snap.season,
-          population: snap.population,
-          prosperity: Math.round(snap.prosperityScore),
-          food: Math.round(snap.food),
-          wood: Math.round(snap.wood),
-          stone: Math.round(snap.stone),
-          avgHealth: Math.round(snap.avgHealth),
-          avgHunger: Math.round(snap.avgHunger),
-          avgEnergy: Math.round(snap.avgEnergy),
-          topActivity: Object.entries(snap.activityBreakdown)
-            .filter(([, count]) => count > 0)
-            .sort(([, a], [, b]) => b - a)
-            .slice(0, 3)
-            .map(([action, count]) => `${action}:${count}`),
-        })),
-
-        // All village events (compact)
-        eventLog: v.events.map(e => ({
-          day: e.day,
-          type: e.type,
-          message: e.message,
-        })),
-      }
-    }),
+  if (state.globalEvents.length > 0) {
+    lines.push('GLOBAL EVENTS')
+    lines.push(hr2)
+    for (const e of state.globalEvents) {
+      lines.push(`  Day ${e.day}  [${e.type}]  ${e.message}`)
+    }
+    lines.push('')
   }
-  return new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+
+  for (const v of state.villages) {
+    const alive = v.villagers.filter(vl => vl.alive)
+    const dead = v.villagers.filter(vl => !vl.alive)
+
+    lines.push(hr)
+    lines.push(`VILLAGE: ${v.name}  (${v.aiSystem.name} AI)`)
+    lines.push(hr)
+    lines.push(`Status:       ${v.isEliminated ? 'ELIMINATED' : 'Active'}`)
+    if (v.eliminationTick !== null) {
+      lines.push(`Eliminated:   tick ${v.eliminationTick} (day ${Math.floor(v.eliminationTick / TIMING.TICKS_PER_DAY)})`)
+      lines.push(`Cause:        ${v.eliminationCause ?? 'unknown'}`)
+    }
+    lines.push(`Population:   ${alive.length} alive, ${dead.length} dead`)
+    lines.push(`Stockpile:    food=${v.stockpile.food}  wood=${v.stockpile.wood}  stone=${v.stockpile.stone}`)
+    lines.push(`Structures:   ${v.structures.length > 0 ? v.structures.map(s => s.type).join(', ') : 'none'}`)
+    lines.push('')
+
+    // Per-villager diagnostics
+    lines.push('  VILLAGERS')
+    lines.push('  ' + hr2)
+    for (const vl of v.villagers) {
+      const needs: string[] = []
+      for (const [type, need] of vl.needs) {
+        needs.push(`${type}=${Math.round(need.current * 10) / 10}`)
+      }
+      const status = vl.alive ? 'alive' : 'DEAD'
+      const effects = vl.statusEffects.length > 0 ? `  effects=[${vl.statusEffects.map(e => e.type).join(',')}]` : ''
+      const decision = vl.lastDecision?.reason ? `  last="${vl.lastDecision.reason}"` : ''
+      lines.push(`  ${vl.name.padEnd(12)} [${status}]  action=${vl.currentAction}  ${needs.join('  ')}${effects}${decision}`)
+    }
+    lines.push('')
+
+    // Death timeline
+    const deaths = v.events.filter(e => e.type === 'death')
+    if (deaths.length > 0) {
+      lines.push('  DEATH TIMELINE')
+      lines.push('  ' + hr2)
+      for (const e of deaths) {
+        lines.push(`  Day ${e.day} (tick ${e.tick}): ${e.message}`)
+        const nearby = v.events
+          .filter(ne => Math.abs(ne.tick - e.tick) <= TIMING.TICKS_PER_DAY && ne.type !== 'death')
+          .slice(0, 5)
+        for (const ne of nearby) {
+          lines.push(`    > [${ne.type}] ${ne.message}`)
+        }
+      }
+      lines.push('')
+    }
+
+    // Snapshot history
+    if (v.history.daily.length > 0) {
+      lines.push('  DAILY SNAPSHOTS')
+      lines.push('  ' + hr2)
+      lines.push('  Day    Season   Pop  Prosp  Food  Wood  Stone  AvgHP  AvgHng  AvgNrg  Top Activity')
+      lines.push('  ' + '-'.repeat(95))
+      for (const snap of v.history.daily) {
+        const top = Object.entries(snap.activityBreakdown)
+          .filter(([, count]) => count > 0)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 3)
+          .map(([action, count]) => `${action}:${count}`)
+          .join(' ')
+        lines.push(
+          `  ${String(Math.round(snap.day * 10) / 10).padEnd(6)} ` +
+          `${snap.season.padEnd(8)} ` +
+          `${String(snap.population).padStart(3)}  ` +
+          `${String(Math.round(snap.prosperityScore)).padStart(5)}  ` +
+          `${String(Math.round(snap.food)).padStart(4)}  ` +
+          `${String(Math.round(snap.wood)).padStart(4)}  ` +
+          `${String(Math.round(snap.stone)).padStart(5)}  ` +
+          `${String(Math.round(snap.avgHealth)).padStart(5)}  ` +
+          `${String(Math.round(snap.avgHunger)).padStart(6)}  ` +
+          `${String(Math.round(snap.avgEnergy)).padStart(6)}  ` +
+          top,
+        )
+      }
+      lines.push('')
+    }
+
+    // Event log
+    if (v.events.length > 0) {
+      lines.push('  EVENT LOG')
+      lines.push('  ' + hr2)
+      for (const e of v.events) {
+        lines.push(`  Day ${e.day}  [${e.type}]  ${e.message}`)
+      }
+      lines.push('')
+    }
+  }
+
+  return new Blob([lines.join('\n')], { type: 'text/plain' })
 }
 
 /** Export daily metrics as CSV */
