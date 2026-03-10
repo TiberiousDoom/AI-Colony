@@ -3,7 +3,7 @@
  * Receives TrainingConfig, posts TrainingState progress updates.
  */
 
-import { trainSync, type TrainingConfig, type TrainingState } from './trainer.ts'
+import { trainAsync, type TrainingConfig, type TrainingState } from './trainer.ts'
 import { serializeGenome } from '../simulation/ai/genome.ts'
 
 let stopRequested = false
@@ -20,7 +20,7 @@ self.onmessage = (event: MessageEvent) => {
     stopRequested = false
     const trainingConfig = config as TrainingConfig
 
-    const bestGenome = trainSync(
+    trainAsync(
       trainingConfig,
       (state: TrainingState) => {
         self.postMessage({
@@ -32,11 +32,11 @@ self.onmessage = (event: MessageEvent) => {
         })
       },
       () => stopRequested,
-    )
-
-    self.postMessage({
-      type: 'complete',
-      genome: serializeGenome(bestGenome),
+    ).then(bestGenome => {
+      self.postMessage({
+        type: 'complete',
+        genome: serializeGenome(bestGenome),
+      })
     })
   }
 }

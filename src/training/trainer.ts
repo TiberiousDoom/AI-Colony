@@ -31,6 +31,7 @@ export interface TrainingConfig {
 
 export interface TrainingState {
   generation: number
+  generationsMax: number
   bestFitness: number
   fitnessHistory: number[]
   bestGenome: Genome
@@ -147,12 +148,12 @@ export function runGeneration(
   return { nextPopulation, bestFitness, bestGenome }
 }
 
-/** Run the full training loop synchronously. Calls onProgress after each generation. */
-export function trainSync(
+/** Run the full training loop asynchronously, yielding between generations so the worker can process messages (e.g. stop). */
+export async function trainAsync(
   config: TrainingConfig,
   onProgress?: (state: TrainingState) => void,
   shouldStop?: () => boolean,
-): Genome {
+): Promise<Genome> {
   const rng = createRNG(config.seed)
   const needCount = getGenomeNeedCount(config.biome)
 
@@ -168,6 +169,9 @@ export function trainSync(
   let plateauCount = 0
 
   for (let gen = 0; gen < config.generationsMax; gen++) {
+    // Yield to event loop so worker can process incoming messages (e.g. stop)
+    await new Promise<void>(resolve => setTimeout(resolve, 0))
+
     if (shouldStop?.()) break
 
     const genSeed = config.seed + gen * 10000
@@ -192,6 +196,7 @@ export function trainSync(
 
     const state: TrainingState = {
       generation: gen + 1,
+      generationsMax: config.generationsMax,
       bestFitness,
       fitnessHistory: [...fitnessHistory],
       bestGenome: cloneGenome(bestGenome),
