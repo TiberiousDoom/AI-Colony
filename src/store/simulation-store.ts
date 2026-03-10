@@ -42,8 +42,6 @@ interface SimulationStore {
 
 let engine: CompetitionEngine | null = null
 let intervalId: ReturnType<typeof setInterval> | null = null
-let lastTimestamp = 0
-let accumulator = 0
 
 const SIM_LOOP_INTERVAL_MS = 50 // poll at ~20Hz; background tabs throttle to ~1Hz
 
@@ -62,47 +60,32 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
       return
     }
 
-    const now = Date.now()
-    if (lastTimestamp === 0) lastTimestamp = now
+    // Number of ticks to process this interval
+    const ticksPerInterval = Math.max(1, Math.round((SIM_LOOP_INTERVAL_MS * store.speed) / TICK_INTERVAL_MS))
+    // Cap to prevent runaway when tab returns from long sleep
+    const maxTicks = Math.min(ticksPerInterval, 32)
 
-    const delta = now - lastTimestamp
-    lastTimestamp = now
-
-    accumulator += delta * store.speed
-
-    let ticked = false
-    while (accumulator >= TICK_INTERVAL_MS) {
+    for (let i = 0; i < maxTicks; i++) {
       engine.tick()
-      accumulator -= TICK_INTERVAL_MS
-      ticked = true
-
-      // Safety: don't process more than 16 ticks per interval
-      if (accumulator >= TICK_INTERVAL_MS * 16) {
-        accumulator = 0
-        break
-      }
     }
 
-    if (ticked) {
-      const newState = engine.getState()
-      set({
-        competitionState: {
-          ...newState,
-          villages: newState.villages.map(v => ({
-            ...v,
-            history: { daily: [...v.history.daily] },
-            events: [...v.events],
-          })),
-          globalEvents: [...newState.globalEvents],
-        } as CompetitionState,
-      })
+    const newState = engine.getState()
+    set({
+      competitionState: {
+        ...newState,
+        villages: newState.villages.map(v => ({
+          ...v,
+          history: { daily: [...v.history.daily] },
+          events: [...v.events],
+        })),
+        globalEvents: [...newState.globalEvents],
+      } as CompetitionState,
+    })
 
-      // Auto-pause when simulation ends -> switch to results view
-      if (newState.isOver) {
-        set({ isRunning: false, viewMode: 'results' })
-        stopLoop()
-        return
-      }
+    // Auto-pause when simulation ends -> switch to results view
+    if (newState.isOver) {
+      set({ isRunning: false, viewMode: 'results' })
+      stopLoop()
     }
   }
 
@@ -130,8 +113,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
       if (!engine) {
         store.init(store.seed)
       }
-      lastTimestamp = 0
-      accumulator = 0
+      stopLoop()
       set({ isRunning: true })
       intervalId = setInterval(gameLoop, SIM_LOOP_INTERVAL_MS)
     },
@@ -173,8 +155,6 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
       stopLoop()
       const competitionConfig = buildCompetitionConfig(config)
       engine = new CompetitionEngine(competitionConfig)
-      lastTimestamp = 0
-      accumulator = 0
       set({
         gameConfig: config,
         seed: config.seed,
