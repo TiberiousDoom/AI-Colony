@@ -4,7 +4,6 @@
  */
 
 import type { CompetitionState } from '../simulation/competition-engine.ts'
-import { getNeed, NeedType } from '../simulation/villager.ts'
 import { TIMING } from '../config/game-constants.ts'
 
 /** Export full competition state as JSON */

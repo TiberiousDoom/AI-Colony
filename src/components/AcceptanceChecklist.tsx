@@ -12,7 +12,6 @@ import {
 } from '../utils/acceptance-checks.ts'
 import { SimulationEngine, type SimulationConfig } from '../simulation/simulation-engine.ts'
 import { useSimulationStore } from '../store/simulation-store.ts'
-import { downloadBlob } from '../utils/export.ts'
 
 interface CheckState {
   status: CheckStatus
@@ -39,6 +38,7 @@ export function AcceptanceChecklist({ onClose }: { onClose: () => void }) {
   const [results, setResults] = useState<Map<string, CheckState>>(new Map())
   const [isRunning, setIsRunning] = useState(false)
   const [activePhase, setActivePhase] = useState<Phase | 'all'>('all')
+  const [exportText, setExportText] = useState<string | null>(null)
 
   const storeState = useSimulationStore(useShallow(s => ({
     simState: s.competitionState,
@@ -90,40 +90,37 @@ export function AcceptanceChecklist({ onClose }: { onClose: () => void }) {
     const checks = ALL_CHECKS.filter(c =>
       c.autoDetect && (activePhase === 'all' || c.phase === activePhase)
     )
-    const data = {
-      exportedAt: new Date().toISOString(),
-      phase: activePhase,
-      summary: {
-        total: checks.length,
-        passed: checks.filter(c => results.get(c.id)?.status === 'pass').length,
-        failed: checks.filter(c => results.get(c.id)?.status === 'fail').length,
-        pending: checks.filter(c => !results.has(c.id) || results.get(c.id)?.status === 'pending').length,
-      },
-      checks: checks.map(c => {
-        const result = results.get(c.id)
-        return {
-          id: c.id,
-          phase: c.phase,
-          category: c.category,
-          label: c.label,
-          description: c.description,
-          status: result?.status ?? 'pending',
-          detail: result?.detail ?? null,
+    const totalPassed = checks.filter(c => results.get(c.id)?.status === 'pass').length
+    const totalFailed = checks.filter(c => results.get(c.id)?.status === 'fail').length
+    const totalPending = checks.length - totalPassed - totalFailed
+
+    const lines: string[] = []
+    lines.push('=== ACCEPTANCE CRITERIA RESULTS ===')
+    lines.push(`Date: ${new Date().toISOString()}`)
+    lines.push(`Filter: ${activePhase === 'all' ? 'All Phases' : PHASE_LABELS[activePhase]}`)
+    lines.push(`Summary: ${totalPassed} passed, ${totalFailed} failed, ${totalPending} pending (${checks.length} total)`)
+    lines.push('')
+
+    for (const phase of [1, 2, 3, 4, 5] as Phase[]) {
+      const phaseChecks = checks.filter(c => c.phase === phase)
+      if (phaseChecks.length === 0) continue
+      const pp = phaseChecks.filter(c => results.get(c.id)?.status === 'pass').length
+      const pf = phaseChecks.filter(c => results.get(c.id)?.status === 'fail').length
+      lines.push(`--- ${PHASE_LABELS[phase]} (${pp}/${phaseChecks.length} passed, ${pf} failed) ---`)
+
+      for (const check of phaseChecks) {
+        const r = results.get(check.id)
+        const status = r?.status ?? 'pending'
+        const icon = status === 'pass' ? 'PASS' : status === 'fail' ? 'FAIL' : 'PENDING'
+        lines.push(`  [${icon}] ${check.label}`)
+        if (r?.detail) {
+          lines.push(`         ${r.detail}`)
         }
-      }),
-      byPhase: ([1, 2, 3, 4, 5] as Phase[]).map(phase => {
-        const phaseChecks = checks.filter(c => c.phase === phase)
-        return {
-          phase,
-          label: PHASE_LABELS[phase],
-          total: phaseChecks.length,
-          passed: phaseChecks.filter(c => results.get(c.id)?.status === 'pass').length,
-          failed: phaseChecks.filter(c => results.get(c.id)?.status === 'fail').length,
-        }
-      }).filter(p => p.total > 0),
+      }
+      lines.push('')
     }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    downloadBlob(blob, `acceptance-results-${new Date().toISOString().slice(0, 10)}.json`)
+
+    setExportText(lines.join('\n'))
   }, [results, activePhase])
 
   const statusIcon = (status: CheckStatus): string => {
@@ -369,6 +366,63 @@ export function AcceptanceChecklist({ onClose }: { onClose: () => void }) {
             )
           })}
       </div>
+
+      {/* Export text overlay */}
+      {exportText !== null && (
+        <div style={{
+          position: 'absolute',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: '#0f172aee',
+          zIndex: 10,
+          display: 'flex',
+          flexDirection: 'column',
+          padding: 16,
+        }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 12,
+            flexShrink: 0,
+          }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>
+              Results — select all &amp; copy
+            </span>
+            <button
+              onClick={() => setExportText(null)}
+              style={{
+                padding: '4px 12px',
+                background: '#1e293b',
+                color: '#e2e8f0',
+                border: '1px solid #475569',
+                borderRadius: 4,
+                cursor: 'pointer',
+                fontSize: 12,
+              }}
+            >
+              Close
+            </button>
+          </div>
+          <textarea
+            readOnly
+            value={exportText}
+            onFocus={e => e.target.select()}
+            style={{
+              flex: 1,
+              background: '#1e293b',
+              color: '#e2e8f0',
+              border: '1px solid #334155',
+              borderRadius: 6,
+              padding: 12,
+              fontFamily: 'monospace',
+              fontSize: 12,
+              lineHeight: 1.5,
+              resize: 'none',
+              outline: 'none',
+            }}
+          />
+        </div>
+      )}
 
       {/* Footer */}
       <div style={{
