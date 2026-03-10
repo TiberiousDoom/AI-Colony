@@ -30,7 +30,7 @@ describe('game-constants regression guard', () => {
   it('NEEDS values match defaults', () => {
     expect(NEEDS.INITIAL_VALUE).toBe(75)
     expect(NEEDS.MAX_VALUE).toBe(100)
-    expect(NEEDS.HUNGER_DRAIN).toBe(2.0)
+    expect(NEEDS.HUNGER_DRAIN).toBe(1.0)
     expect(NEEDS.ENERGY_DRAIN).toBe(1.0)
     expect(NEEDS.HEALTH_DRAIN).toBe(0)
     expect(NEEDS.WARMTH_DRAIN).toBe(0)

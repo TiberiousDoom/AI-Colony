@@ -30,7 +30,7 @@ describe('Villager', () => {
       const health = getNeed(v, NeedType.Health)
 
       expect(hunger.current).toBe(75)
-      expect(hunger.drainRate).toBe(2.0)
+      expect(hunger.drainRate).toBe(1.0)
       expect(energy.current).toBe(75)
       expect(energy.drainRate).toBe(1.0)
       expect(health.current).toBe(75)
@@ -88,7 +88,7 @@ describe('Villager', () => {
 
       tickNeeds(v)
 
-      expect(getNeed(v, NeedType.Hunger).current).toBe(hungerBefore - 2.0)
+      expect(getNeed(v, NeedType.Hunger).current).toBe(hungerBefore - 1.0)
       expect(getNeed(v, NeedType.Energy).current).toBe(energyBefore - 1.0)
     })
 
