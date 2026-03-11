@@ -30,11 +30,6 @@ function isGatherAction(action: VillagerAction): boolean {
   return action === 'forage' || action === 'fish'
 }
 
-/** Whether an action is a survival response */
-function isSurvivalAction(action: VillagerAction): boolean {
-  return action === 'eat' || action === 'rest' || action === 'warm_up' || action === 'flee'
-}
-
 /** Whether an action helps stockpile resources */
 function isStockpileAction(action: VillagerAction): boolean {
   return action === 'forage' || action === 'chop_wood' || action === 'mine_stone' || action === 'fish' || action === 'haul'
