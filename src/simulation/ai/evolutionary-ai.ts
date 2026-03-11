@@ -225,12 +225,15 @@ export class EvolutionaryAI implements IAISystem {
       }
 
       // [3] Emergency modifier (low health or energy)
-      // Hardcoded minimums ensure survival instincts regardless of genome
+      // Targeted: only boost the action that actually addresses the root cause
       const health = getNeed(villager as Villager, NeedType.Health)
       const energy = getNeed(villager as Villager, NeedType.Energy)
       const hunger = getNeed(villager as Villager, NeedType.Hunger)
-      if (health.current < 30 && isSurvivalAction(actionType)) {
-        score += Math.max(0.8, envW[3])
+      if (health.current < 30 && actionType === 'eat' && hunger.current < 50) {
+        score += Math.max(0.8, envW[3]) // health low from hunger → eat
+      }
+      if (health.current < 30 && actionType === 'rest' && energy.current < 30) {
+        score += Math.max(0.8, envW[3]) // health low from exhaustion → rest
       }
       if (energy.current < 25 && actionType === 'rest') {
         score += Math.max(0.8, envW[3])
@@ -285,6 +288,45 @@ export class EvolutionaryAI implements IAISystem {
         score,
         reason: parts.length > 0 ? parts.join(', ') : 'base',
       })
+    }
+
+    // Hard survival overrides — bypass genome when death is imminent
+    const overrideHunger = getNeed(villager as Villager, NeedType.Hunger)
+    const overrideEnergy = getNeed(villager as Villager, NeedType.Energy)
+    if (overrideHunger.current <= 15) {
+      const eatEntry = scored.find(s => s.action === 'eat' && s.score > -999)
+      if (eatEntry) {
+        const target = findTargetForAction('eat', villager, worldView)
+        return {
+          action: 'eat',
+          targetPosition: target,
+          reason: `Evo(gen${this.genome.generation}): eat [STARVING override]`,
+          scores: scored.map(s => ({ action: s.action, score: s.score, reason: s.reason })),
+        }
+      }
+      // No food available — force forage if possible
+      const forageEntry = scored.find(s => s.action === 'forage' && s.score > -999)
+      if (forageEntry) {
+        const target = findTargetForAction('forage', villager, worldView)
+        return {
+          action: 'forage',
+          targetPosition: target,
+          reason: `Evo(gen${this.genome.generation}): forage [STARVING override, no food]`,
+          scores: scored.map(s => ({ action: s.action, score: s.score, reason: s.reason })),
+        }
+      }
+    }
+    if (overrideEnergy.current <= 10) {
+      const restEntry = scored.find(s => s.action === 'rest' && s.score > -999)
+      if (restEntry) {
+        const target = findTargetForAction('rest', villager, worldView)
+        return {
+          action: 'rest',
+          targetPosition: target,
+          reason: `Evo(gen${this.genome.generation}): rest [EXHAUSTION override]`,
+          scores: scored.map(s => ({ action: s.action, score: s.score, reason: s.reason })),
+        }
+      }
     }
 
     // Select highest scoring action
