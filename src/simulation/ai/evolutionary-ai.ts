@@ -169,11 +169,6 @@ export class EvolutionaryAI implements IAISystem {
 
   decide(villager: Readonly<Villager>, worldView: AIWorldView, rng: SeededRNG): AIDecision {
     const campfire = worldView.campfirePosition
-    const ctx = {
-      timeOfDay: worldView.timeOfDay,
-      season: worldView.season,
-      structures: worldView.structures as Array<{ type: string; position: { x: number; y: number } }>,
-    }
 
     // Build the list of active needs for this genome
     const activeNeeds = [...BASE_NEEDS]
