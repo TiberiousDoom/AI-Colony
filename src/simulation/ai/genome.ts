@@ -53,6 +53,7 @@ export function createRandomGenome(rng: SeededRNG, needCount: number, biome: Bio
   const eatIdx = ACTION_LIST.indexOf('eat')       // 2
   const restIdx = ACTION_LIST.indexOf('rest')      // 3
   const forageIdx = ACTION_LIST.indexOf('forage')  // 1
+  const fishIdx = ACTION_LIST.indexOf('fish')      // 7
   const warmUpIdx = ACTION_LIST.indexOf('warm_up') // 11
 
   for (let i = 0; i < actionWeights.length; i++) {
@@ -61,11 +62,13 @@ export function createRandomGenome(rng: SeededRNG, needCount: number, biome: Bio
     // Ensure survival-critical weights have minimum floors for their corresponding needs
     const needIdx = i % needCount
     if (actionIdx === eatIdx && needIdx === 0) {
-      w = Math.max(0.6, w) // eat × hunger weight always >= 0.6
+      w = Math.max(0.8, w) // eat × hunger weight always >= 0.8
     } else if (actionIdx === restIdx && needIdx === 1) {
       w = Math.max(0.5, w) // rest × energy weight always >= 0.5
     } else if (actionIdx === forageIdx && needIdx === 0) {
-      w = Math.max(0.4, w) // forage × hunger weight always >= 0.4
+      w = Math.max(0.8, w) // forage × hunger weight always >= 0.8
+    } else if (actionIdx === fishIdx && needIdx === 0) {
+      w = Math.max(0.7, w) // fish × hunger weight always >= 0.7
     } else if (actionIdx === warmUpIdx && needIdx === 3) {
       w = Math.max(0.6, w) // warm_up × warmth weight always >= 0.6
     }

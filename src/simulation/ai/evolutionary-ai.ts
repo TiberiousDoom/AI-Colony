@@ -8,7 +8,6 @@ import type { IAISystem, AIDecision, AIWorldView } from './ai-interface.ts'
 import type { Villager, VillagerAction, Position } from '../villager.ts'
 import { NeedType, getNeed } from '../villager.ts'
 import { TileType } from '../world.ts'
-import { getAllActions } from '../actions.ts'
 import { type Genome, ACTION_LIST } from './genome.ts'
 
 /** Urgency curve matching Utility AI: (1 - value/100)^2 */
@@ -19,6 +18,33 @@ function urgencyCurve(value: number): number {
 
 /** Need types in the order they appear in the genome weight vector */
 const BASE_NEEDS: NeedType[] = [NeedType.Hunger, NeedType.Energy, NeedType.Health, NeedType.Warmth]
+
+/**
+ * Relevance mask: which needs each action can meaningfully respond to.
+ * Matches Utility AI's non-zero weight patterns.
+ * true = genome weight is used as-is; false = capped at 0.1 to prevent
+ * cross-need contamination (e.g., warm_up scoring from hunger urgency).
+ */
+const ACTION_NEED_RELEVANCE: Record<string, boolean[]> = {
+  // [hunger, energy, health, warmth]
+  idle:            [false, false, false, false],
+  forage:          [true,  false, true,  false],
+  eat:             [true,  false, true,  false],
+  rest:            [false, true,  true,  false],
+  chop_wood:       [true,  false, false, false],
+  mine_stone:      [false, false, false, false],
+  haul:            [true,  false, false, false],
+  fish:            [true,  false, true,  false],
+  flee:            [false, false, false, false],
+  build_shelter:   [false, false, true,  true ],
+  build_storage:   [false, false, false, false],
+  warm_up:         [false, false, false, true ],
+  build_watchtower:[false, false, true,  false],
+  build_farm:      [true,  false, false, false],
+  build_wall:      [false, false, true,  false],
+  build_well:      [false, false, false, false],
+  cool_down:       [false, false, false, false],
+}
 
 /** Whether an action is outdoors (affected by night penalty) */
 function isOutdoor(action: VillagerAction): boolean {
@@ -142,7 +168,6 @@ export class EvolutionaryAI implements IAISystem {
   }
 
   decide(villager: Readonly<Villager>, worldView: AIWorldView, rng: SeededRNG): AIDecision {
-    const allActions = getAllActions()
     const campfire = worldView.campfirePosition
     const ctx = {
       timeOfDay: worldView.timeOfDay,
@@ -160,19 +185,30 @@ export class EvolutionaryAI implements IAISystem {
 
     for (let actionIdx = 0; actionIdx < ACTION_LIST.length; actionIdx++) {
       const actionType = ACTION_LIST[actionIdx]
-      const actionDef = allActions.find(a => a.type === actionType)
-      if (!actionDef) continue
+      // Note: we do NOT check canPerform here (matching Utility AI behavior).
+      // canPerform often requires adjacency to specific tiles (forest, stone, water),
+      // but the engine handles pathfinding to targetPosition before starting the action.
+      // Filtering by canPerform would reject forage/fish/etc for villagers not yet
+      // at their target, causing always-available actions like warm_up to win by default.
 
-      // Check if action can be performed
-      if (!actionDef.canPerform(
-        villager as Villager,
-        worldView.world,
-        worldView.stockpile as { food: number; wood: number; stone: number },
-        campfire,
-        ctx,
-      )) {
-        scored.push({ action: actionType, score: -999, reason: 'unavailable' })
-        continue
+      // Suppress eat when no food is available — eat requires stockpile.food >= 5
+      // Without this, villagers walk to campfire, fail to eat, and idle in a death spiral
+      if (actionType === 'eat') {
+        const canEat = worldView.stockpile.food >= 5 ||
+          (villager.carrying?.type === 'food' && (villager.carrying?.amount ?? 0) >= 5)
+        if (!canEat) {
+          scored.push({ action: actionType, score: -999, reason: 'no food available' })
+          continue
+        }
+      }
+
+      // Suppress flee when no predator is present — prevents random scattering
+      if (actionType === 'flee') {
+        const hasPredator = worldView.activeEvents.some(e => e.type === 'predator')
+        if (!hasPredator) {
+          scored.push({ action: actionType, score: -999, reason: 'no predator' })
+          continue
+        }
       }
 
       // Need-based scoring using genome weights
@@ -191,7 +227,12 @@ export class EvolutionaryAI implements IAISystem {
           : urgencyCurve(need.current)
 
         const weightIdx = actionIdx * this.genome.needCount + needIdx
-        const weight = this.genome.actionWeights[weightIdx] ?? 0
+        let weight = this.genome.actionWeights[weightIdx] ?? 0
+        // Cap irrelevant action-need pairs to prevent cross-contamination
+        const relevance = ACTION_NEED_RELEVANCE[actionType]
+        if (relevance && !relevance[needIdx]) {
+          weight = Math.min(weight, 0.1)
+        }
         const contribution = weight * urgency
         score += contribution
 
@@ -203,9 +244,9 @@ export class EvolutionaryAI implements IAISystem {
       // Environmental modifiers using evolved weights
       const envW = this.genome.envWeights
 
-      // [0] Night modifier
+      // [0] Night modifier — reduced impact to prevent rest domination
       if (worldView.timeOfDay === 'night') {
-        const mod = envW[0] * (isOutdoor(actionType) ? -1 : 0.5)
+        const mod = envW[0] * (isOutdoor(actionType) ? -0.3 : 0.15)
         score += mod
       }
 
@@ -214,30 +255,82 @@ export class EvolutionaryAI implements IAISystem {
         score += envW[1]
       }
 
-      // [2] Low food modifier
-      if (worldView.stockpile.food < 10 && isGatherAction(actionType)) {
-        score += Math.max(0.3, envW[2])
+      // [2] Low food modifier — critical for sustaining population
+      // Scale threshold with population: need ~5 food per villager per eat cycle
+      const alivePop = worldView.villagers.filter(v => v.alive).length
+      const foodPerCapita = alivePop > 0 ? worldView.stockpile.food / alivePop : 100
+      if (foodPerCapita < 15 && isGatherAction(actionType)) {
+        const foodBonus = foodPerCapita < 5 ? 0.6 : foodPerCapita < 10 ? 0.4 : 0.25
+        score += Math.max(foodBonus, envW[2])
+      }
+
+      // Productivity modifiers
+      const health = getNeed(villager as Villager, NeedType.Health)
+      const energy = getNeed(villager as Villager, NeedType.Energy)
+      const hunger = getNeed(villager as Villager, NeedType.Hunger)
+
+      // Resting penalty scales with how unnecessary rest is
+      if (actionType === 'rest') {
+        if (energy.current > 50) {
+          score -= 0.3 // not tired at all
+        } else if (energy.current > 25 && foodPerCapita < 10) {
+          score -= 0.2 // not critical energy + food crisis = keep working
+        }
+      }
+      // Productive work bonus
+      if (energy.current > 25 && (isGatherAction(actionType) || actionType === 'chop_wood' || actionType === 'mine_stone')) {
+        score += 0.15
       }
 
       // [3] Emergency modifier (low health or energy)
       // Targeted: only boost the action that actually addresses the root cause
-      const health = getNeed(villager as Villager, NeedType.Health)
-      const energy = getNeed(villager as Villager, NeedType.Energy)
-      const hunger = getNeed(villager as Villager, NeedType.Hunger)
       if (health.current < 30 && actionType === 'eat' && hunger.current < 50) {
         score += Math.max(0.8, envW[3]) // health low from hunger → eat
       }
       if (health.current < 30 && actionType === 'rest' && energy.current < 30) {
         score += Math.max(0.8, envW[3]) // health low from exhaustion → rest
       }
-      if (energy.current < 25 && actionType === 'rest') {
-        score += Math.max(0.8, envW[3])
+      if (energy.current < 10 && actionType === 'rest') {
+        score += Math.max(0.6, envW[3])
+      } else if (energy.current < 25 && actionType === 'rest' && foodPerCapita >= 10) {
+        // Only rest for moderate tiredness when food isn't critical
+        score += Math.max(0.4, envW[3] * 0.5)
       }
-      if (hunger.current < 35 && actionType === 'eat') {
-        score += Math.max(1.0, envW[3])
+      if (hunger.current < 50 && actionType === 'eat') {
+        score += Math.max(0.5, envW[3])
       }
-      if (hunger.current < 35 && isGatherAction(actionType) && worldView.stockpile.food < 10) {
-        score += Math.max(0.6, envW[3] * 0.5)
+      if (hunger.current < 50 && isGatherAction(actionType) && worldView.stockpile.food < 20) {
+        score += Math.max(0.4, envW[3] * 0.5)
+      }
+
+      // Wood gathering: when food is sufficient but wood is low, chop wood for building
+      if (actionType === 'chop_wood' && foodPerCapita >= 15 && worldView.stockpile.wood < 30) {
+        score += 0.3
+      }
+      // Mine stone when wood is sufficient and stone is low
+      if (actionType === 'mine_stone' && foodPerCapita >= 15 && worldView.stockpile.wood >= 20 && worldView.stockpile.stone < 15) {
+        score += 0.25
+      }
+
+      // Building priorities: shelters for population, farms for food production
+      if (actionType === 'build_shelter') {
+        const shelterCount = worldView.structures.filter(s => s.type === 'shelter').length
+        const pop = worldView.villagers.filter(v => v.alive).length
+        if (pop > shelterCount * 3 && worldView.stockpile.wood >= 20) {
+          score += 0.4
+        }
+      }
+      if (actionType === 'build_farm') {
+        const hasFarm = worldView.structures.some(s => s.type === 'farm')
+        if (!hasFarm && worldView.stockpile.wood >= 15) {
+          score += 0.3
+        }
+      }
+      if (actionType === 'build_storage') {
+        const hasStorage = worldView.structures.some(s => s.type === 'storage')
+        if (!hasStorage && worldView.stockpile.wood >= 15 && worldView.stockpile.stone >= 10) {
+          score += 0.3
+        }
       }
 
       // [4] Autumn stockpiling modifier
@@ -245,8 +338,8 @@ export class EvolutionaryAI implements IAISystem {
         score += envW[4]
       }
 
-      // [5] Social: bonus for being near campfire when resting/eating
-      if ((actionType === 'rest' || actionType === 'eat') &&
+      // [5] Social: bonus for being near campfire when eating (not resting)
+      if (actionType === 'eat' &&
         Math.abs(villager.position.x - campfire.x) <= 2 &&
         Math.abs(villager.position.y - campfire.y) <= 2) {
         score += envW[5] * 0.3
@@ -285,41 +378,61 @@ export class EvolutionaryAI implements IAISystem {
       })
     }
 
-    // Hard survival overrides — bypass genome when death is imminent
+    // Hard survival overrides — bypass genome when needs are critical
     const overrideHunger = getNeed(villager as Villager, NeedType.Hunger)
     const overrideEnergy = getNeed(villager as Villager, NeedType.Energy)
-    if (overrideHunger.current <= 15) {
-      const eatEntry = scored.find(s => s.action === 'eat' && s.score > -999)
+    const hungerCritical = overrideHunger.current <= 30
+    const energyCritical = overrideEnergy.current <= 15
+
+    // When both are critical, address the MORE urgent one first
+    const hungerFirst = hungerCritical && (!energyCritical || overrideHunger.current <= overrideEnergy.current)
+    const energyFirst = energyCritical && !hungerFirst
+
+    if (energyFirst) {
+      const target = findTargetForAction('rest', villager, worldView)
+      return {
+        action: 'rest',
+        targetPosition: target,
+        reason: `Evo(gen${this.genome.generation}): rest [EXHAUSTION override]`,
+        scores: scored.map(s => ({ action: s.action, score: s.score, reason: s.reason })),
+      }
+    }
+
+    if (hungerFirst) {
+      // Try eat — but only if food is actually available (eat requires stockpile.food >= 5)
+      const canEat = worldView.stockpile.food >= 5 ||
+        (villager.carrying?.type === 'food' && (villager.carrying?.amount ?? 0) >= 5)
+      const eatEntry = canEat ? scored.find(s => s.action === 'eat' && s.score > -999) : undefined
       if (eatEntry) {
         const target = findTargetForAction('eat', villager, worldView)
         return {
           action: 'eat',
           targetPosition: target,
-          reason: `Evo(gen${this.genome.generation}): eat [STARVING override]`,
+          reason: `Evo(gen${this.genome.generation}): eat [HUNGRY override]`,
           scores: scored.map(s => ({ action: s.action, score: s.score, reason: s.reason })),
         }
       }
-      // No food available — force forage if possible
-      const forageEntry = scored.find(s => s.action === 'forage' && s.score > -999)
-      if (forageEntry) {
-        const target = findTargetForAction('forage', villager, worldView)
+      // If carrying food, haul it back so it can be eaten
+      if (villager.carrying?.type === 'food') {
+        const target = findTargetForAction('haul', villager, worldView)
         return {
-          action: 'forage',
+          action: 'haul',
           targetPosition: target,
-          reason: `Evo(gen${this.genome.generation}): forage [STARVING override, no food]`,
+          reason: `Evo(gen${this.genome.generation}): haul [HUNGRY override, hauling food]`,
           scores: scored.map(s => ({ action: s.action, score: s.score, reason: s.reason })),
         }
       }
-    }
-    if (overrideEnergy.current <= 10) {
-      const restEntry = scored.find(s => s.action === 'rest' && s.score > -999)
-      if (restEntry) {
-        const target = findTargetForAction('rest', villager, worldView)
-        return {
-          action: 'rest',
-          targetPosition: target,
-          reason: `Evo(gen${this.genome.generation}): rest [EXHAUSTION override]`,
-          scores: scored.map(s => ({ action: s.action, score: s.score, reason: s.reason })),
+      // No food available — try to gather food
+      for (const gatherAction of ['forage', 'fish'] as VillagerAction[]) {
+        const entry = scored.find(s => s.action === gatherAction && s.score > -999)
+        if (entry) {
+          const target = findTargetForAction(gatherAction, villager, worldView)
+          return {
+            action: gatherAction,
+            targetPosition: target,
+            reason: `Evo(gen${this.genome.generation}): ${gatherAction} [HUNGRY override, no food]`,
+            scores: scored.map(s => ({ action: s.action, score: s.score, reason: s.reason })),
+          }
         }
       }
     }
