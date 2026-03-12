@@ -263,6 +263,7 @@ export class SimulationEngine {
       season: this.state.season,
       structures: this.state.structures,
       activeEvents: this.state.activeEvents,
+      monsters: [],
       villageId: 'single',
     }
 

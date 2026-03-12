@@ -82,7 +82,7 @@ export function snapshotWorldState(villager: Readonly<Villager>, worldView: AIWo
       return dist <= 6 && m.behaviorState !== 'dead'
     }),
     monster_threatening: (worldView.monsters ?? []).some(m =>
-      (m.behaviorState === 'chasing' || m.behaviorState === 'attacking') && m.behaviorState !== 'dead',
+      m.behaviorState === 'chasing' || m.behaviorState === 'attacking',
     ),
     is_sick: (villager as Villager).statusEffects?.some(e => e.type === 'illness') ?? false,
   }

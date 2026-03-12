@@ -202,7 +202,7 @@ export const GOAP_ACTIONS: GOAPAction[] = [
     name: 'AttackMonster',
     preconditions: { monster_nearby: true },
     effects: { monster_threatening: false },
-    cost: (state, wv, villager) => {
+    cost: (_state, wv, villager) => {
       const health = getNeed(villager as Villager, NeedType.Health)
       const monster = findNearestMonsterToVillager(villager, wv.monsters)
       if (!monster) return 20
