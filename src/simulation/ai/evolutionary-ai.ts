@@ -9,6 +9,7 @@ import type { Villager, VillagerAction, Position } from '../villager.ts'
 import { NeedType, getNeed } from '../villager.ts'
 import { TileType } from '../world.ts'
 import { type Genome, ACTION_LIST } from './genome.ts'
+import { findNearestMonsterToVillager, countAlliesNearMonster, shouldFight } from '../monster.ts'
 
 /** Urgency curve matching Utility AI: (1 - value/100)^2 */
 function urgencyCurve(value: number): number {
@@ -44,6 +45,7 @@ const ACTION_NEED_RELEVANCE: Record<string, boolean[]> = {
   build_wall:      [false, false, true,  false],
   build_well:      [false, false, false, false],
   cool_down:       [false, false, false, false],
+  attack:          [false, false, true,  false],
 }
 
 /** Whether an action is outdoors (affected by night penalty) */
@@ -137,7 +139,21 @@ function findTargetForAction(action: VillagerAction, villager: Readonly<Villager
       })
       return { x: fertile[0].x, y: fertile[0].y }
     }
+    case 'attack': {
+      const monster = findNearestMonsterToVillager(villager, worldView.monsters)
+      if (monster) return { x: monster.position.x, y: monster.position.y }
+      return undefined
+    }
     case 'flee': {
+      // Flee from nearest monster first, then predator events
+      const monster = findNearestMonsterToVillager(villager, worldView.monsters)
+      if (monster) {
+        const dx = villager.position.x - monster.position.x
+        const dy = villager.position.y - monster.position.y
+        const targetX = Math.max(0, Math.min(worldView.world.width - 1, villager.position.x + Math.sign(dx) * 8))
+        const targetY = Math.max(0, Math.min(worldView.world.height - 1, villager.position.y + Math.sign(dy) * 8))
+        return { x: targetX, y: targetY }
+      }
       const predator = worldView.activeEvents.find(e => e.type === 'predator')
       if (predator) {
         const px = worldView.campfirePosition.x + predator.relativePosition.dx
@@ -197,11 +213,25 @@ export class EvolutionaryAI implements IAISystem {
         }
       }
 
-      // Suppress flee when no predator is present — prevents random scattering
+      // Suppress flee when no predator or monster is present
       if (actionType === 'flee') {
         const hasPredator = worldView.activeEvents.some(e => e.type === 'predator')
-        if (!hasPredator) {
-          scored.push({ action: actionType, score: -999, reason: 'no predator' })
+        const hasMonster = (worldView.monsters ?? []).some(m =>
+          Math.abs(m.position.x - villager.position.x) + Math.abs(m.position.y - villager.position.y) <= 5 &&
+          m.behaviorState !== 'dead')
+        if (!hasPredator && !hasMonster) {
+          scored.push({ action: actionType, score: -999, reason: 'no threat' })
+          continue
+        }
+      }
+
+      // Suppress attack when no monsters nearby
+      if (actionType === 'attack') {
+        const hasMonster = (worldView.monsters ?? []).some(m =>
+          Math.abs(m.position.x - villager.position.x) + Math.abs(m.position.y - villager.position.y) <= 5 &&
+          m.behaviorState !== 'dead')
+        if (!hasMonster) {
+          scored.push({ action: actionType, score: -999, reason: 'no monster' })
           continue
         }
       }
@@ -338,6 +368,31 @@ export class EvolutionaryAI implements IAISystem {
         Math.abs(villager.position.x - campfire.x) <= 2 &&
         Math.abs(villager.position.y - campfire.y) <= 2) {
         score += envW[5] * 0.3
+      }
+
+      // Monster combat: fight or flee using evolved aggression weight [6]
+      const nearestMonster = findNearestMonsterToVillager(villager, worldView.monsters)
+      const monsterDist = nearestMonster
+        ? Math.abs(villager.position.x - nearestMonster.position.x) + Math.abs(villager.position.y - nearestMonster.position.y)
+        : Infinity
+
+      if (actionType === 'attack' && nearestMonster && monsterDist <= 5) {
+        const alliesNear = countAlliesNearMonster(nearestMonster.position, worldView.villagers)
+        if (envW[6] > 0.5 && health.current > 40 && alliesNear >= 2) {
+          score += 1.5
+          parts.push('fight monster +1.5')
+        } else if (shouldFight(health.current, nearestMonster, alliesNear)) {
+          score += 1.0
+          parts.push('fight (heuristic) +1.0')
+        }
+      }
+
+      if (actionType === 'flee' && nearestMonster && monsterDist <= 5) {
+        const alliesNear = countAlliesNearMonster(nearestMonster.position, worldView.villagers)
+        if (!shouldFight(health.current, nearestMonster, alliesNear)) {
+          score += 2.0
+          parts.push('flee monster +2.0')
+        }
       }
 
       // Predator flee: hardcoded response like Utility AI

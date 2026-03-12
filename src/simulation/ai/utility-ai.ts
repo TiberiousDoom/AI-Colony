@@ -8,6 +8,7 @@ import type { Villager, VillagerAction, Position } from '../villager.ts'
 import { NeedType, getNeed } from '../villager.ts'
 import { TileType } from '../world.ts'
 import { getAllActions, type ActionDefinition } from '../actions.ts'
+import { findNearestMonsterToVillager, countAlliesNearMonster, shouldFight } from '../monster.ts'
 
 // --- Urgency Curve ---
 
@@ -43,6 +44,7 @@ const WEIGHTS: Record<string, ActionWeights> = {
   build_farm:       { hunger: 0.3, energy: 0.1, health: 0.1, warmth: 0.0 },
   build_wall:       { hunger: 0.0, energy: 0.1, health: 0.3, warmth: 0.0 },
   build_well:       { hunger: 0.2, energy: 0.1, health: 0.1, warmth: 0.0 },
+  attack:           { hunger: 0.0, energy: 0.1, health: 0.8, warmth: 0.0 },
 }
 
 // --- Score Calculation ---
@@ -118,8 +120,38 @@ function scoreAction(
     reasons.push('warmth emergency +0.5')
   }
 
-  // Flee: predator active within 5 tiles
+  // Monster combat: attack or flee based on fight-vs-flee heuristic
+  const nearestMonster = findNearestMonsterToVillager(villager, worldView.monsters)
+  const monsterDist = nearestMonster
+    ? Math.abs(villager.position.x - nearestMonster.position.x) + Math.abs(villager.position.y - nearestMonster.position.y)
+    : Infinity
+
+  if (action.type === 'attack') {
+    if (nearestMonster && monsterDist <= 5) {
+      const alliesNear = countAlliesNearMonster(nearestMonster.position, worldView.villagers)
+      const villagerHealth = health.current
+      if (shouldFight(villagerHealth, nearestMonster, alliesNear)) {
+        envMod += 1.5
+        reasons.push('fight monster +1.5')
+        if (nearestMonster.hp < nearestMonster.maxHp * 0.5) {
+          envMod += 0.3
+          reasons.push('finish weak +0.3')
+        }
+      }
+    }
+  }
+
+  // Flee: predator or monster nearby
   if (action.type === 'flee') {
+    // Monster flee
+    if (nearestMonster && monsterDist <= 5) {
+      const alliesNear = countAlliesNearMonster(nearestMonster.position, worldView.villagers)
+      if (!shouldFight(health.current, nearestMonster, alliesNear)) {
+        envMod += 2.0
+        reasons.push('flee monster +2.0')
+      }
+    }
+    // Legacy predator event flee
     const predator = worldView.activeEvents.find(e => e.type === 'predator')
     if (predator) {
       const px = worldView.campfirePosition.x + predator.relativePosition.dx
@@ -303,13 +335,25 @@ function findTargetForAction(
       })
       return { x: fertile[0].x, y: fertile[0].y }
     }
+    case 'attack': {
+      const monster = findNearestMonsterToVillager(villager, worldView.monsters)
+      if (monster) return { x: monster.position.x, y: monster.position.y }
+      return undefined
+    }
     case 'flee': {
-      // Flee away from predator
+      // Flee away from nearest monster or predator
+      const monster = findNearestMonsterToVillager(villager, worldView.monsters)
+      if (monster) {
+        const dx = villager.position.x - monster.position.x
+        const dy = villager.position.y - monster.position.y
+        const targetX = Math.max(0, Math.min(worldView.world.width - 1, villager.position.x + Math.sign(dx) * 8))
+        const targetY = Math.max(0, Math.min(worldView.world.height - 1, villager.position.y + Math.sign(dy) * 8))
+        return { x: targetX, y: targetY }
+      }
       const predator = worldView.activeEvents.find(e => e.type === 'predator')
       if (predator) {
         const px = worldView.campfirePosition.x + predator.relativePosition.dx
         const py = worldView.campfirePosition.y + predator.relativePosition.dy
-        // Move to campfire (safe zone) or away from predator
         const dx = villager.position.x - px
         const dy = villager.position.y - py
         const targetX = Math.max(0, Math.min(worldView.world.width - 1, villager.position.x + Math.sign(dx) * 8))

@@ -39,7 +39,7 @@ export const NEEDS = {
   ILLNESS_MULTIPLIER: 2,
   STARVATION_DAMAGE: 1.0,
   EXPOSURE_DAMAGE: 1.0,
-  HEALTH_RECOVERY: 0.5,
+  HEALTH_RECOVERY: 0.8,
   HEALTH_RECOVERY_HUNGER_THRESHOLD: 50,
   HEALTH_RECOVERY_ENERGY_THRESHOLD: 30,
   COOLING_DRAIN: 2.0,
@@ -101,7 +101,7 @@ export const EVENTS = {
   PREDATOR_SEVERITY_MIN: 20,
   PREDATOR_SEVERITY_MAX: 40,
   PREDATOR_RADIUS: 5,
-  PREDATOR_DURATION: 1,
+  PREDATOR_DURATION: 5,
   BLIGHT_OFFSET: 10,
   BLIGHT_RADIUS: 5,
   BLIGHT_DURATION: 90,
@@ -116,6 +116,40 @@ export const EVENTS = {
   RESOURCE_DISCOVERY_RADIUS: 3,
   RESOURCE_DISCOVERY_DURATION: 1,
   WALL_DAMAGE_REDUCTION: 0.5,
+} as const
+
+// --- Monsters ---
+
+export const MONSTERS = {
+  // Ambient spawning
+  AMBIENT_SPAWN_INTERVAL: 60,       // ticks between ambient spawn checks (2 days)
+  AMBIENT_SPAWN_CHANCE: 0.25,       // probability per check
+  AMBIENT_MAX_MONSTERS: 2,          // cap per village instance
+  AMBIENT_SPAWN_EDGE_MARGIN: 2,     // spawn within N tiles of map edge
+
+  // Raid waves (replaces predator direct damage)
+  RAID_BASE_COUNT: 2,               // base monsters in a raid
+  RAID_SCALE_PER_DAY: 0.03,         // additional monsters per day elapsed
+  RAID_DESPAWN_TICKS: 90,           // event monsters despawn after this
+
+  // Combat
+  VILLAGER_BASE_ATTACK_DAMAGE: 8,   // bare-handed damage per attack completion
+  ATTACK_DURATION: 2,               // ticks to complete an attack action
+  ATTACK_ENERGY_COST: 2,            // energy per tick while attacking
+  ATTACK_RANGE: 1,                  // Manhattan distance (adjacent)
+  MONSTER_ATTACK_COOLDOWN: 4,       // ticks between monster attacks
+
+  // Defensive structures
+  WALL_MONSTER_SLOW_TICKS: 2,       // extra ticks for monster to cross wall-adjacent tile
+  WALL_MONSTER_DAMAGE: 3,           // damage taken by monster crossing wall zone
+
+  // Monster type stats
+  TYPES: {
+    wolf:   { hp: 25, damage: 3,  speed: 1,   detectionRadius: 6, fleeThresholdPercent: 25, lootFood: 5,  lootWood: 0 },
+    bear:   { hp: 50, damage: 6,  speed: 0.5, detectionRadius: 4, fleeThresholdPercent: 20, lootFood: 10, lootWood: 0 },
+    goblin: { hp: 15, damage: 2,  speed: 1,   detectionRadius: 8, fleeThresholdPercent: 30, lootFood: 3,  lootWood: 2 },
+    snake:  { hp: 12, damage: 3,  speed: 1,   detectionRadius: 3, fleeThresholdPercent: 40, lootFood: 2,  lootWood: 0 },
+  },
 } as const
 
 // --- Competition ---

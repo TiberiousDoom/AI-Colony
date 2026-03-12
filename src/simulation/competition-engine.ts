@@ -31,7 +31,17 @@ import {
   TICKS_PER_DAY, DAY_TICKS, DAYS_PER_SEASON, SNAPSHOT_INTERVAL,
   type SimulationHistory, type SimulationEvent, type SimulationEventType,
 } from './simulation-engine.ts'
-import { COMPETITION, EVENTS as EVENT_CONST, POPULATION } from '../config/game-constants.ts'
+import { COMPETITION, EVENTS as EVENT_CONST, POPULATION, MONSTERS } from '../config/game-constants.ts'
+import {
+  type Monster,
+  type MonsterType,
+  createMonster,
+  tickMonsterAI,
+  isAdjacentToMonster,
+  damageMonster,
+  getMonsterLoot,
+} from './monster.ts'
+import { isAtStructure } from './structures.ts'
 
 const SEASONS: Season[] = ['spring', 'summer', 'autumn', 'winter']
 const VICTORY_LAP_DAYS = COMPETITION.VICTORY_LAP_DAYS
@@ -74,6 +84,10 @@ export interface VillageState {
   eliminationCause: string | null
   growthTimer: number
   exhaustedResources?: Set<TileType>
+  monsters: Monster[]
+  monstersKilled: number
+  /** Track which predator events already spawned raid monsters (by triggerTick) */
+  spawnedRaidEvents: Set<number>
 }
 
 export interface CompetitionState {
@@ -144,6 +158,9 @@ export class CompetitionEngine {
         eliminationTick: null,
         eliminationCause: null,
         growthTimer: 0,
+        monsters: [],
+        monstersKilled: 0,
+        spawnedRaidEvents: new Set(),
       }
     })
 
@@ -269,6 +286,9 @@ export class CompetitionEngine {
         eliminationTick: null,
         eliminationCause: null,
         growthTimer: 0,
+        monsters: [],
+        monstersKilled: 0,
+        spawnedRaidEvents: new Set(),
       }
     })
 
@@ -356,6 +376,41 @@ export class CompetitionEngine {
             }
           }
 
+          // Attack resolution: when attack action completes, deal damage to target monster
+          // Uses range 2 (not just adjacency) to account for monster movement during attack windup
+          if (villager.currentAction === 'attack') {
+            const attackRange = MONSTERS.ATTACK_RANGE + 1 // slight leniency for movement
+            let hit = false
+            // Try original target first
+            if (villager.attackTargetMonsterId) {
+              const targetMonster = village.monsters.find(m => m.id === villager.attackTargetMonsterId && m.behaviorState !== 'dead')
+              if (targetMonster) {
+                const dist = Math.abs(villager.position.x - targetMonster.position.x) + Math.abs(villager.position.y - targetMonster.position.y)
+                if (dist <= attackRange) {
+                  damageMonster(targetMonster, MONSTERS.VILLAGER_BASE_ATTACK_DAMAGE)
+                  hit = true
+                }
+              }
+            }
+            // Fallback: hit nearest living monster within range
+            if (!hit) {
+              let bestMonster: Monster | null = null
+              let bestDist = Infinity
+              for (const m of village.monsters) {
+                if (m.behaviorState === 'dead') continue
+                const dist = Math.abs(villager.position.x - m.position.x) + Math.abs(villager.position.y - m.position.y)
+                if (dist <= attackRange && dist < bestDist) {
+                  bestMonster = m
+                  bestDist = dist
+                }
+              }
+              if (bestMonster) {
+                damageMonster(bestMonster, MONSTERS.VILLAGER_BASE_ATTACK_DAMAGE)
+              }
+            }
+            villager.attackTargetMonsterId = undefined
+          }
+
           this.tryAutoDeposit(villager, village)
           villager.currentAction = 'idle'
         }
@@ -375,6 +430,48 @@ export class CompetitionEngine {
       }
     }
 
+    // Monster AI tick
+    for (const monster of village.monsters) {
+      if (monster.behaviorState === 'dead') continue
+      tickMonsterAI(monster, village.villagers, village.world, village.structures, rngs.general, this.state.tick, village.world.campfirePosition)
+    }
+
+    // Monster attacks: deal damage to adjacent villagers
+    for (const monster of village.monsters) {
+      if (monster.behaviorState !== 'attacking') continue
+      const target = village.villagers.find(v => v.id === monster.targetVillagerId && v.alive)
+      if (target && isAdjacentToMonster(target.position, monster.position)) {
+        if (this.state.tick - monster.lastAttackTick >= MONSTERS.MONSTER_ATTACK_COOLDOWN) {
+          const health = getNeed(target, NeedType.Health)
+          const damageReduction = hasWall(village.structures) ? EVENT_CONST.WALL_DAMAGE_REDUCTION : 1.0
+          // Sheltered villagers (resting at shelter) take no monster damage
+          const sheltered = target.currentAction === 'rest' && isAtStructure(target.position, village.structures, 'shelter')
+          if (!sheltered) {
+            health.current -= monster.damage * damageReduction
+            clampNeed(health)
+          }
+          monster.lastAttackTick = this.state.tick
+        }
+      }
+    }
+
+    // Monster cleanup: remove dead/despawned, drop loot
+    village.monsters = village.monsters.filter(m => {
+      if (m.behaviorState === 'dead') {
+        const loot = getMonsterLoot(m)
+        const cap = getStockpileCap(village.structures)
+        village.stockpile.food = Math.min(cap, village.stockpile.food + loot.food)
+        village.stockpile.wood = Math.min(cap, village.stockpile.wood + loot.wood)
+        village.monstersKilled++
+        this.addVillageEvent(village, 'monster_killed', `A ${m.type} was slain!`)
+        return false
+      }
+      if (m.despawnTick !== null && this.state.tick >= m.despawnTick) {
+        return false
+      }
+      return true
+    })
+
     // AI decisions
     const worldView: AIWorldView = {
       world: village.world,
@@ -386,6 +483,7 @@ export class CompetitionEngine {
       season: this.state.season,
       structures: village.structures,
       activeEvents: this.state.activeEvents,
+      monsters: village.monsters.filter(m => m.behaviorState !== 'dead'),
       villageId: village.id,
     }
 
@@ -398,7 +496,33 @@ export class CompetitionEngine {
       villager.lastDecision = { reason: decision.reason, scores: decision.scores, goapPlan: decision.goapPlan }
       const actionDef = getActionDefinition(decision.action)
 
-      if (actionDef && actionDef.canPerform(villager, village.world, village.stockpile, village.campfirePosition, ctx)) {
+      // Set attack target monster ID when deciding to attack — find nearest living monster
+      if (decision.action === 'attack') {
+        let bestMonster: Monster | null = null
+        let bestDist = Infinity
+        for (const m of village.monsters) {
+          if (m.behaviorState === 'dead') continue
+          const dist = Math.abs(villager.position.x - m.position.x) + Math.abs(villager.position.y - m.position.y)
+          if (dist < bestDist) {
+            bestMonster = m
+            bestDist = dist
+          }
+        }
+        villager.attackTargetMonsterId = bestMonster?.id
+        // Update target position to monster's current position for pathfinding
+        if (bestMonster) {
+          decision.targetPosition = { x: bestMonster.position.x, y: bestMonster.position.y }
+        }
+      }
+
+      // For attack: only start the action if a monster is within attack range, otherwise pathfind
+      const canStartAction = decision.action === 'attack'
+        ? (villager.attackTargetMonsterId != null &&
+           village.monsters.some(m => m.id === villager.attackTargetMonsterId && m.behaviorState !== 'dead' &&
+             Math.abs(villager.position.x - m.position.x) + Math.abs(villager.position.y - m.position.y) <= MONSTERS.ATTACK_RANGE + 1))
+        : (actionDef?.canPerform(villager, village.world, village.stockpile, village.campfirePosition, ctx) ?? false)
+
+      if (actionDef && canStartAction) {
         villager.currentAction = decision.action
         villager.actionTicksRemaining = actionDef.getEffectiveDuration(ctx)
       } else if (decision.targetPosition) {
@@ -415,6 +539,9 @@ export class CompetitionEngine {
         }
       }
     }
+
+    // Ambient monster spawning
+    this.spawnAmbientMonsters(village, rngs.general)
 
     // Death check
     for (const villager of village.villagers) {
@@ -574,22 +701,24 @@ export class CompetitionEngine {
         const pos = resolveEventPosition(event, village.campfirePosition)
 
         if (event.type === 'predator') {
-          const detectionBonus = getWatchtowerDetectionBonus(village.structures)
-          const effectiveRadius = event.radius + detectionBonus
-          const damageReduction = hasWall(village.structures) ? EVENT_CONST.WALL_DAMAGE_REDUCTION : 1.0
-
-          for (const villager of village.villagers) {
-            if (!villager.alive) continue
-            const dist = Math.abs(villager.position.x - pos.x) + Math.abs(villager.position.y - pos.y)
-            if (dist <= effectiveRadius) {
-              // Villagers within detection range (but outside damage range) can flee
-              // Villagers within damage range take reduced damage if walls present
-              if (dist <= event.radius) {
-                const health = getNeed(villager, NeedType.Health)
-                health.current -= (event.severity * damageReduction) / Math.max(1, event.durationTicks || 1)
-                clampNeed(health)
+          // Predator events now spawn raid monsters instead of direct damage.
+          // Spawn only once per event (tracked by triggerTick).
+          if (!village.spawnedRaidEvents.has(event.triggerTick)) {
+            village.spawnedRaidEvents.add(event.triggerTick)
+            const raidCount = MONSTERS.RAID_BASE_COUNT + Math.floor(this.state.dayCount * MONSTERS.RAID_SCALE_PER_DAY)
+            const monsterTypes: MonsterType[] = this.state.dayCount < 20
+              ? ['wolf', 'snake']
+              : ['wolf', 'bear', 'goblin', 'snake']
+            const rngsForVillage = this.villageRngs.get(village.id)!
+            for (let i = 0; i < raidCount; i++) {
+              const mType = monsterTypes[rngsForVillage.general.nextInt(0, monsterTypes.length - 1)]
+              const spawnPos = {
+                x: Math.max(0, Math.min(village.world.width - 1, pos.x + rngsForVillage.general.nextInt(-3, 3))),
+                y: Math.max(0, Math.min(village.world.height - 1, pos.y + rngsForVillage.general.nextInt(-3, 3))),
               }
+              village.monsters.push(createMonster(mType, spawnPos, true, this.state.tick + MONSTERS.RAID_DESPAWN_TICKS))
             }
+            this.addVillageEvent(village, 'random_event', `A raid of ${raidCount} monsters appeared!`)
           }
         } else if (event.type === 'cold_snap') {
           for (const villager of village.villagers) {
@@ -648,6 +777,40 @@ export class CompetitionEngine {
       case 'stone': s.stone = Math.min(cap, s.stone + villager.carrying.amount); break
     }
     villager.carrying = null
+  }
+
+  private spawnAmbientMonsters(village: VillageState, rng: SeededRNG): void {
+    if (this.state.tick % MONSTERS.AMBIENT_SPAWN_INTERVAL !== 0) return
+    if (rng.next() > MONSTERS.AMBIENT_SPAWN_CHANCE) return
+
+    const ambientCount = village.monsters.filter(m => !m.spawnedByEvent && m.behaviorState !== 'dead').length
+    if (ambientCount >= MONSTERS.AMBIENT_MAX_MONSTERS) return
+
+    // Grace period: no ambient monsters before day 7
+    if (this.state.dayCount < 7) return
+
+    // Pick type based on day/season
+    let monsterType: MonsterType
+    if (this.state.dayCount > 20) {
+      const roll = rng.next()
+      monsterType = roll < 0.3 ? 'goblin' : roll < 0.6 ? 'wolf' : roll < 0.85 ? 'bear' : 'snake'
+    } else {
+      const roll = rng.next()
+      monsterType = roll < 0.5 ? 'wolf' : roll < 0.8 ? 'snake' : 'goblin'
+    }
+
+    // Spawn at map edge
+    const edge = rng.nextInt(0, 3)
+    const margin = MONSTERS.AMBIENT_SPAWN_EDGE_MARGIN
+    let x: number, y: number
+    switch (edge) {
+      case 0: x = rng.nextInt(margin, village.world.width - margin - 1); y = margin; break
+      case 1: x = rng.nextInt(margin, village.world.width - margin - 1); y = village.world.height - margin - 1; break
+      case 2: x = margin; y = rng.nextInt(margin, village.world.height - margin - 1); break
+      default: x = village.world.width - margin - 1; y = rng.nextInt(margin, village.world.height - margin - 1); break
+    }
+
+    village.monsters.push(createMonster(monsterType, { x, y }, false, null))
   }
 
   private checkEndConditions(): void {
@@ -725,6 +888,9 @@ export class CompetitionEngine {
     if (village.stockpile.food <= 0) {
       return `starvation, day ${this.state.dayCount + 1}`
     }
+    if (village.monsters.length > 0) {
+      return `monster attack, day ${this.state.dayCount + 1}`
+    }
     const hadPredator = this.state.activeEvents.some(e => e.type === 'predator')
     if (hadPredator) {
       return `predator attack, day ${this.state.dayCount + 1}`
@@ -754,7 +920,7 @@ export class CompetitionEngine {
     const actionTypes: VillagerAction[] = [
       'idle', 'forage', 'eat', 'rest', 'chop_wood', 'mine_stone',
       'haul', 'fish', 'flee', 'build_shelter', 'build_storage', 'warm_up',
-      'build_watchtower', 'build_farm', 'build_wall', 'build_well',
+      'build_watchtower', 'build_farm', 'build_wall', 'build_well', 'attack',
     ]
     for (const a of actionTypes) activityBreakdown[a] = 0
     for (const v of alive) {

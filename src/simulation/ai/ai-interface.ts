@@ -7,6 +7,17 @@ import type { Villager, VillagerAction, VillageStockpile, Position, Season } fro
 import type { World } from '../world.ts'
 import type { TimeOfDay, StructureLike } from '../actions.ts'
 
+export interface MonsterLike {
+  id: string
+  type: string
+  hp: number
+  maxHp: number
+  damage: number
+  position: { x: number; y: number }
+  behaviorState: string
+  targetVillagerId: string | null
+}
+
 export interface RandomEventLike {
   type: string
   relativePosition: { dx: number; dy: number }
@@ -43,6 +54,7 @@ export interface AIWorldView {
   season: Season
   structures: ReadonlyArray<Readonly<StructureLike>>
   activeEvents: ReadonlyArray<Readonly<RandomEventLike>>
+  monsters: ReadonlyArray<Readonly<MonsterLike>>
   villageId: string
 }
 

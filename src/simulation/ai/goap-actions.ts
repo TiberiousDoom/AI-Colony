@@ -7,6 +7,8 @@ import type { Villager, Position } from '../villager.ts'
 import { TileType } from '../world.ts'
 import type { AIWorldView } from './ai-interface.ts'
 import type { GOAPAction } from './goap-types.ts'
+import { getNeed, NeedType } from '../villager.ts'
+import { findNearestMonsterToVillager, countAlliesNearMonster } from '../monster.ts'
 
 // --- Target finders (reusable) ---
 
@@ -178,11 +180,43 @@ export const GOAP_ACTIONS: GOAPAction[] = [
   },
   {
     name: 'Flee',
-    preconditions: { predator_nearby: true },
-    effects: { predator_nearby: false },
+    preconditions: {},
+    effects: { predator_nearby: false, monster_nearby: false },
     cost: 0,
     villagerAction: 'flee',
-    targetFinder: fleeTarget,
+    targetFinder: (villager, wv) => {
+      // Flee from nearest monster first, then predator events
+      const monster = findNearestMonsterToVillager(villager, wv.monsters)
+      if (monster) {
+        const dx = villager.position.x - monster.position.x
+        const dy = villager.position.y - monster.position.y
+        const targetX = Math.max(0, Math.min(wv.world.width - 1, villager.position.x + Math.sign(dx) * 8))
+        const targetY = Math.max(0, Math.min(wv.world.height - 1, villager.position.y + Math.sign(dy) * 8))
+        return { x: targetX, y: targetY }
+      }
+      return fleeTarget(villager, wv)
+    },
+    runtimeCheck: (_v, wv) => (wv.monsters ?? []).some(m => m.behaviorState !== 'dead') || wv.activeEvents.some(e => e.type === 'predator'),
+  },
+  {
+    name: 'AttackMonster',
+    preconditions: { monster_nearby: true },
+    effects: { monster_threatening: false },
+    cost: (state, wv, villager) => {
+      const health = getNeed(villager as Villager, NeedType.Health)
+      const monster = findNearestMonsterToVillager(villager, wv.monsters)
+      if (!monster) return 20
+      const allies = countAlliesNearMonster(monster.position, wv.villagers)
+      if (health.current > 40 && allies >= 2) return 2
+      if (health.current < 30) return 20
+      return 8
+    },
+    villagerAction: 'attack',
+    targetFinder: (villager, wv) => {
+      const monster = findNearestMonsterToVillager(villager, wv.monsters)
+      return monster ? { x: monster.position.x, y: monster.position.y } : undefined
+    },
+    runtimeCheck: (_v, wv) => (wv.monsters ?? []).some(m => m.behaviorState !== 'dead'),
   },
 
   // Building

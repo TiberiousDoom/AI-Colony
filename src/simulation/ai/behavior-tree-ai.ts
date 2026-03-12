@@ -28,6 +28,7 @@ import type { Villager, Position } from '../villager.ts'
 import { NeedType, getNeed } from '../villager.ts'
 import { TileType } from '../world.ts'
 import { Selector, Sequence, Condition, ActionNode, type BTNode, type BTContext } from './behavior-tree.ts'
+import { findNearestMonsterToVillager, countAlliesNearMonster, shouldFight } from '../monster.ts'
 
 // --- Target Finders ---
 
@@ -126,6 +127,49 @@ function buildVillagerTree(villager: Readonly<Villager>, wv: AIWorldView): BTNod
         const targetX = Math.max(0, Math.min(ctx.worldView.world.width - 1, villager.position.x + Math.sign(dx) * 8))
         const targetY = Math.max(0, Math.min(ctx.worldView.world.height - 1, villager.position.y + Math.sign(dy) * 8))
         return { action: 'flee', targetPosition: { x: targetX, y: targetY }, reason: 'BT: predator nearby → flee' }
+      }),
+    ]),
+  ])
+
+  // Combat branch: fight or flee from monsters
+  const combat = new Selector([
+    // Fight: monster within 5 tiles, healthy enough with allies
+    new Sequence([
+      new Condition(() => {
+        const monster = findNearestMonsterToVillager(villager, wv.monsters)
+        if (!monster) return false
+        const dist = Math.abs(villager.position.x - monster.position.x) + Math.abs(villager.position.y - monster.position.y)
+        if (dist > 5) return false
+        const alliesNear = countAlliesNearMonster(monster.position, wv.villagers)
+        const health = getNeed(villager as Villager, NeedType.Health)
+        return shouldFight(health.current, monster, alliesNear)
+      }),
+      new ActionNode((ctx) => {
+        const monster = findNearestMonsterToVillager(villager, ctx.worldView.monsters)
+        if (!monster) return { action: 'idle', reason: 'BT: no monster to fight' }
+        return {
+          action: 'attack',
+          targetPosition: { x: monster.position.x, y: monster.position.y },
+          reason: `BT: fighting ${monster.type} (hp=${monster.hp}/${monster.maxHp})`,
+        }
+      }),
+    ]),
+    // Flee from monster: monster within 5 tiles but shouldn't fight
+    new Sequence([
+      new Condition(() => {
+        const monster = findNearestMonsterToVillager(villager, wv.monsters)
+        if (!monster) return false
+        const dist = Math.abs(villager.position.x - monster.position.x) + Math.abs(villager.position.y - monster.position.y)
+        return dist <= 5
+      }),
+      new ActionNode((ctx) => {
+        const monster = findNearestMonsterToVillager(villager, ctx.worldView.monsters)
+        if (!monster) return { action: 'flee', targetPosition: { ...ctx.worldView.campfirePosition }, reason: 'BT: flee (no monster?)' }
+        const dx = villager.position.x - monster.position.x
+        const dy = villager.position.y - monster.position.y
+        const targetX = Math.max(0, Math.min(ctx.worldView.world.width - 1, villager.position.x + Math.sign(dx) * 8))
+        const targetY = Math.max(0, Math.min(ctx.worldView.world.height - 1, villager.position.y + Math.sign(dy) * 8))
+        return { action: 'flee', targetPosition: { x: targetX, y: targetY }, reason: `BT: fleeing from ${monster.type}` }
       }),
     ]),
   ])
@@ -339,6 +383,7 @@ function buildVillagerTree(villager: Readonly<Villager>, wv: AIWorldView): BTNod
   // Root selector: try branches top-to-bottom
   return new Selector([
     emergency,
+    combat,
     criticalNeeds,
     hauling,
     villageTasks,

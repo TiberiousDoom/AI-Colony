@@ -13,11 +13,11 @@ export const ACTION_LIST: VillagerAction[] = [
   'idle', 'forage', 'eat', 'rest', 'chop_wood', 'mine_stone',
   'haul', 'fish', 'flee', 'build_shelter', 'build_storage',
   'warm_up', 'build_watchtower', 'build_farm', 'build_wall', 'build_well',
-  'cool_down',
+  'cool_down', 'attack',
 ]
 
 export const NUM_ACTIONS = ACTION_LIST.length // 17
-export const NUM_ENV_WEIGHTS = 6 // night, carrying, lowFood, emergency, seasonal, social
+export const NUM_ENV_WEIGHTS = 7 // night, carrying, lowFood, emergency, seasonal, social, combatAggression
 
 export interface Genome {
   /** Need weights per action: length = NUM_ACTIONS * needCount */

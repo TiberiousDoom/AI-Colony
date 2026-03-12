@@ -334,7 +334,7 @@ describe('Actions', () => {
       expect(getActionDefinition('idle')).toBe(IDLE_ACTION)
     })
 
-    it('getAllActions returns all 17 registered actions', () => {
+    it('getAllActions returns all 18 registered actions', () => {
       const actions = getAllActions()
       const types = actions.map(a => a.type)
       expect(types).toContain('forage')
@@ -354,7 +354,8 @@ describe('Actions', () => {
       expect(types).toContain('build_wall')
       expect(types).toContain('build_well')
       expect(types).toContain('cool_down')
-      expect(actions.length).toBe(17)
+      expect(types).toContain('attack')
+      expect(actions.length).toBe(18)
     })
   })
 })

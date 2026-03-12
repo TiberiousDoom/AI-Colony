@@ -96,7 +96,7 @@ describe('Villager', () => {
       const v = createVillager('test', 'Bob', 0, 0)
       tickNeeds(v)
       // Health recovers when hunger > 50 and energy > 30 (both true at 73/74)
-      expect(getNeed(v, NeedType.Health).current).toBe(75.5)
+      expect(getNeed(v, NeedType.Health).current).toBe(75.8)
     })
 
     it('causes starvation damage when hunger is 0', () => {
@@ -119,8 +119,8 @@ describe('Villager', () => {
 
       tickNeeds(v)
 
-      // hunger after drain: 78 > 50, energy after drain: 59 > 30 → +0.5 health
-      expect(getNeed(v, NeedType.Health).current).toBe(healthBefore + 0.5)
+      // hunger after drain: 78 > 50, energy after drain: 59 > 30 → +0.8 health
+      expect(getNeed(v, NeedType.Health).current).toBe(healthBefore + 0.8)
     })
 
     it('kills villager when health reaches 0', () => {

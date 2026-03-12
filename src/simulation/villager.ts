@@ -55,6 +55,7 @@ export type VillagerAction =
   | 'build_wall'
   | 'build_well'
   | 'cool_down'
+  | 'attack'
 
 // --- Villager ---
 
@@ -76,6 +77,8 @@ export interface Villager {
   carrying: { type: 'food' | 'wood' | 'stone'; amount: number } | null
   /** Active status effects (illness, etc.) */
   statusEffects: Array<{ type: 'illness'; ticksRemaining: number }>
+  /** Monster being attacked (set by AI, used by engine to resolve combat) */
+  attackTargetMonsterId?: string
   /** Last AI decision (for inspector display) */
   lastDecision?: {
     reason: string

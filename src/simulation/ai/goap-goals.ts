@@ -6,13 +6,35 @@ import type { Villager } from '../villager.ts'
 import { NeedType, getNeed } from '../villager.ts'
 import type { AIWorldView } from './ai-interface.ts'
 import type { GOAPGoal, GOAPWorldState } from './goap-types.ts'
+import { findNearestMonsterToVillager, countAlliesNearMonster, shouldFight } from '../monster.ts'
 
 export const GOAP_GOALS: GOAPGoal[] = [
   {
     name: 'FleeFromDanger',
-    desiredState: { predator_nearby: false },
-    priority: (_v, _wv, state) => {
+    desiredState: { predator_nearby: false, monster_nearby: false },
+    priority: (villager, wv, state) => {
+      if (state.monster_nearby) {
+        const health = getNeed(villager as Villager, NeedType.Health)
+        const monster = findNearestMonsterToVillager(villager, wv.monsters)
+        if (monster) {
+          const allies = countAlliesNearMonster(monster.position, wv.villagers)
+          if (!shouldFight(health.current, monster, allies)) return 2.0
+        }
+      }
       return state.predator_nearby ? 2.0 : 0
+    },
+  },
+  {
+    name: 'DefendVillage',
+    desiredState: { monster_threatening: false },
+    priority: (villager, wv, state) => {
+      if (!state.monster_nearby) return 0
+      const health = getNeed(villager as Villager, NeedType.Health)
+      const monster = findNearestMonsterToVillager(villager, wv.monsters)
+      if (!monster) return 0
+      const allies = countAlliesNearMonster(monster.position, wv.villagers)
+      if (shouldFight(health.current, monster, allies)) return 1.8
+      return 0
     },
   },
   {
