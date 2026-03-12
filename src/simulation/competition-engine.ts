@@ -25,7 +25,7 @@ import {
 import { type TimeOfDay, type TickContext, getActionDefinition } from './actions.ts'
 import type { IAISystem, AIWorldView } from './ai/ai-interface.ts'
 import type { Structure } from './structures.ts'
-import { type StructureType, getStockpileCap, getShelterCapacity, createStructure, getFarmFoodProduction, getWatchtowerDetectionBonus, hasWall } from './structures.ts'
+import { type StructureType, getStockpileCap, getShelterCapacity, createStructure, getFarmFoodProduction, hasWall } from './structures.ts'
 import { EventScheduler, type RandomEvent, resolveEventPosition } from './events.ts'
 import {
   TICKS_PER_DAY, DAY_TICKS, DAYS_PER_SEASON, SNAPSHOT_INTERVAL,
