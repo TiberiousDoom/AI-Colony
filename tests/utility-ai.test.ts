@@ -17,6 +17,7 @@ function makeWorldView(overrides?: Partial<AIWorldView>): AIWorldView {
     season: 'summer',
     structures: [],
     activeEvents: [],
+    monsters: [],
     villageId: 'test',
     ...overrides,
   }

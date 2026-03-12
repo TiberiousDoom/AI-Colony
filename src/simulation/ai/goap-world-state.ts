@@ -77,6 +77,13 @@ export function snapshotWorldState(villager: Readonly<Villager>, worldView: AIWo
     })(),
 
     predator_nearby: predatorNearby,
+    monster_nearby: (worldView.monsters ?? []).some(m => {
+      const dist = Math.abs(vx - m.position.x) + Math.abs(vy - m.position.y)
+      return dist <= 6 && m.behaviorState !== 'dead'
+    }),
+    monster_threatening: (worldView.monsters ?? []).some(m =>
+      (m.behaviorState === 'chasing' || m.behaviorState === 'attacking') && m.behaviorState !== 'dead',
+    ),
     is_sick: (villager as Villager).statusEffects?.some(e => e.type === 'illness') ?? false,
   }
 }

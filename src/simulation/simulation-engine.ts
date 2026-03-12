@@ -80,6 +80,7 @@ export type SimulationEventType =
   | 'critical_population'
   | 'stagnation_warning'
   | 'resource_exhaustion'
+  | 'monster_killed'
 
 export interface SimulationEvent {
   tick: number

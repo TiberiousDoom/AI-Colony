@@ -338,6 +338,12 @@ export const FLEE_ACTION = makeAction(
   () => { /* Movement handled by engine — no resource yield */ },
 )
 
+export const ATTACK_ACTION = makeAction(
+  'attack', 2, 2,
+  () => true,
+  () => { /* Damage resolution handled by engine via attackTargetMonsterId */ },
+)
+
 function canAffordStructure(stockpile: VillageStockpile, type: StructureType): boolean {
   const cost = STRUCTURE_COSTS[type]
   return stockpile.wood >= cost.wood && stockpile.stone >= cost.stone
@@ -433,6 +439,7 @@ const ACTION_MAP = new Map<VillagerAction, ActionDefinition>([
   ['build_wall', BUILD_WALL_ACTION],
   ['build_well', BUILD_WELL_ACTION],
   ['cool_down', COOL_DOWN_ACTION],
+  ['attack', ATTACK_ACTION],
 ])
 
 export function getActionDefinition(action: VillagerAction): ActionDefinition | undefined {

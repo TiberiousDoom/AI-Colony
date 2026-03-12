@@ -28,6 +28,7 @@ function makeWorldView(world: World): AIWorldView {
     tick: 0,
     campfirePosition: { x: 16, y: 16 },
     activeEvents: [],
+    monsters: [],
     villageId: 'test',
   }
 }
@@ -56,8 +57,8 @@ describe('EvolutionaryAI', () => {
   })
 
   it('different genomes produce different decisions', () => {
-    const rng1 = createRNG(1)
-    const rng2 = createRNG(999)
+    const rng1 = createRNG(42)
+    const rng2 = createRNG(12345)
     const genome1 = createRandomGenome(rng1, 4, 'temperate')
     const genome2 = createRandomGenome(rng2, 4, 'temperate')
     const ai1 = new EvolutionaryAI(genome1)

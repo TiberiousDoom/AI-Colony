@@ -38,6 +38,8 @@ export interface GOAPWorldState {
 
   // Situational
   predator_nearby: boolean
+  monster_nearby: boolean
+  monster_threatening: boolean
   is_sick: boolean
 }
 
