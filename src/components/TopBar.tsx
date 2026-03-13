@@ -5,7 +5,7 @@
 import { useSimulationStore } from '../store/simulation-store.ts'
 import { ViewToggle } from './ViewToggle.tsx'
 
-const SPEED_OPTIONS = [1, 2, 4, 8]
+const SPEED_OPTIONS = [1, 2, 4, 8, 32]
 
 const SEASON_LABELS: Record<string, string> = {
   spring: 'Spring',
