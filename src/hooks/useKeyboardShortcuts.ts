@@ -2,7 +2,7 @@
  * Keyboard shortcuts for simulation control.
  *
  * Space: toggle start/pause
- * 1/2/3/4: set speed 1x/2x/4x/8x
+ * 1/2/3/4/5: set speed 1x/2x/4x/8x/32x
  * M: metrics view, S: simulation view, R: results view
  * Escape: close modals/inspector
  * ?: toggle help modal
@@ -16,6 +16,7 @@ const SPEED_MAP: Record<string, number> = {
   '2': 2,
   '3': 4,
   '4': 8,
+  '5': 32,
 }
 
 export function useKeyboardShortcuts(callbacks?: {

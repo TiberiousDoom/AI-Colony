@@ -871,6 +871,8 @@ export class CompetitionEngine {
                   ? this.eventScheduler.createIllness(this.state.dayCount)
                   : this.eventScheduler.createStorm(this.state.dayCount)
                 this.state.activeEvents.push(forcedEvent)
+                this.addVillageEvent(village, 'random_event',
+                  `Forced ${forcedEvent.type} event (stagnation breaker)`)
                 this.addGlobalEvent('random_event',
                   `Forced ${forcedEvent.type} event (stagnation breaker)`)
               }
