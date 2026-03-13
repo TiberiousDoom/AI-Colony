@@ -4,6 +4,7 @@
 
 import { useSimulationStore } from '../store/simulation-store.ts'
 import { ViewToggle } from './ViewToggle.tsx'
+import { useIsMobile } from '../hooks/useIsMobile.ts'
 
 const SPEED_OPTIONS = [1, 2, 4, 8, 32]
 
@@ -16,6 +17,7 @@ const SEASON_LABELS: Record<string, string> = {
 
 export function TopBar({ onToggleChecklist, onToggleSaveLoad }: { onToggleChecklist?: () => void; onToggleSaveLoad?: () => void }) {
   const { competitionState, isRunning, speed, seed, start, pause, reset, setSpeed, setSeed, init, showSetupScreen } = useSimulationStore()
+  const mobile = useIsMobile()
 
   const handleStartPause = () => {
     if (isRunning) {
@@ -52,23 +54,33 @@ export function TopBar({ onToggleChecklist, onToggleSaveLoad }: { onToggleCheckl
   const villageNames = competitionState?.villages.map(v => v.name) ?? []
   const winnerVillage = winner ? competitionState?.villages.find(v => v.id === winner) : null
 
+  const btnStyle: React.CSSProperties = {
+    padding: mobile ? '4px 6px' : '4px 8px',
+    borderRadius: 4,
+    border: '1px solid #334155',
+    background: 'transparent',
+    color: '#94a3b8',
+    cursor: 'pointer',
+    fontSize: mobile ? 11 : 12,
+  }
+
   return (
     <div style={{
       display: 'flex',
       alignItems: 'center',
-      gap: 16,
-      padding: '12px 20px',
+      gap: mobile ? 8 : 16,
+      padding: mobile ? '8px 12px' : '12px 20px',
       background: '#0f172a',
       borderBottom: '1px solid #1e293b',
       flexWrap: 'wrap',
     }}>
       {/* Title */}
-      <div style={{ fontWeight: 700, fontSize: 16, color: '#f1f5f9', marginRight: 8 }}>
+      <div style={{ fontWeight: 700, fontSize: mobile ? 14 : 16, color: '#f1f5f9', marginRight: mobile ? 4 : 8 }}>
         AI Colony
       </div>
 
       {/* Matchup */}
-      {villageNames.length > 1 && (
+      {villageNames.length > 1 && !mobile && (
         <div style={{ color: '#94a3b8', fontSize: 12, fontWeight: 600 }}>
           {villageNames.join(' vs ')}
         </div>
@@ -79,7 +91,7 @@ export function TopBar({ onToggleChecklist, onToggleSaveLoad }: { onToggleCheckl
         onClick={handleStartPause}
         disabled={isOver}
         style={{
-          padding: '6px 16px',
+          padding: mobile ? '4px 12px' : '6px 16px',
           borderRadius: 6,
           border: 'none',
           background: isRunning ? '#f59e0b' : '#22c55e',
@@ -96,7 +108,7 @@ export function TopBar({ onToggleChecklist, onToggleSaveLoad }: { onToggleCheckl
       <button
         onClick={handleReset}
         style={{
-          padding: '6px 16px',
+          padding: mobile ? '4px 12px' : '6px 16px',
           borderRadius: 6,
           border: '1px solid #334155',
           background: 'transparent',
@@ -109,20 +121,20 @@ export function TopBar({ onToggleChecklist, onToggleSaveLoad }: { onToggleCheckl
       </button>
 
       {/* Speed */}
-      <div data-testid="speed-control" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <span style={{ color: '#64748b', fontSize: 12 }}>Speed:</span>
+      <div data-testid="speed-control" style={{ display: 'flex', alignItems: 'center', gap: mobile ? 2 : 4 }}>
+        <span style={{ color: '#64748b', fontSize: mobile ? 11 : 12 }}>Speed:</span>
         {SPEED_OPTIONS.map(s => (
           <button
             key={s}
             onClick={() => setSpeed(s)}
             style={{
-              padding: '4px 8px',
+              padding: mobile ? '2px 6px' : '4px 8px',
               borderRadius: 4,
               border: speed === s ? '1px solid #3b82f6' : '1px solid #334155',
               background: speed === s ? '#1e3a5f' : 'transparent',
               color: speed === s ? '#60a5fa' : '#64748b',
               cursor: 'pointer',
-              fontSize: 12,
+              fontSize: mobile ? 11 : 12,
             }}
           >
             {s}x
@@ -132,7 +144,7 @@ export function TopBar({ onToggleChecklist, onToggleSaveLoad }: { onToggleCheckl
 
       {/* Day / Time / Season / Biome */}
       {competitionState && (
-        <div style={{ color: '#94a3b8', fontSize: 13 }}>
+        <div style={{ color: '#94a3b8', fontSize: mobile ? 11 : 13 }}>
           Day {dayCount} — {timeOfDay === 'day' ? 'Daytime' : 'Night'} — {SEASON_LABELS[season] ?? season}
           {competitionState.config.biome && competitionState.config.biome !== 'temperate' && (
             <span style={{ color: '#a78bfa', marginLeft: 8, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 }}>
@@ -143,34 +155,30 @@ export function TopBar({ onToggleChecklist, onToggleSaveLoad }: { onToggleCheckl
       )}
 
       {/* Seed */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
-        <span style={{ color: '#64748b', fontSize: 12 }}>Seed:</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: mobile ? undefined : 'auto' }}>
+        <span style={{ color: '#64748b', fontSize: mobile ? 11 : 12 }}>Seed:</span>
         <input
           type="number"
           value={seed}
           onChange={handleSeedChange}
           disabled={isRunning}
           style={{
-            width: 90,
+            width: mobile ? 70 : 90,
             padding: '4px 8px',
             borderRadius: 4,
             border: '1px solid #334155',
             background: '#1e293b',
             color: '#f1f5f9',
-            fontSize: 13,
+            fontSize: mobile ? 12 : 13,
           }}
         />
         <button
           onClick={handleRandomize}
           disabled={isRunning}
           style={{
-            padding: '4px 8px',
-            borderRadius: 4,
-            border: '1px solid #334155',
-            background: 'transparent',
-            color: '#64748b',
+            ...btnStyle,
             cursor: isRunning ? 'not-allowed' : 'pointer',
-            fontSize: 11,
+            color: '#64748b',
           }}
         >
           Random
@@ -193,58 +201,28 @@ export function TopBar({ onToggleChecklist, onToggleSaveLoad }: { onToggleCheckl
       {/* View toggle */}
       <ViewToggle />
 
-      {/* Save/Load */}
-      {onToggleSaveLoad && (
-        <button
-          onClick={onToggleSaveLoad}
-          style={{
-            padding: '4px 8px',
-            borderRadius: 4,
-            border: '1px solid #334155',
-            background: 'transparent',
-            color: '#94a3b8',
-            cursor: 'pointer',
-            fontSize: 12,
-          }}
-        >
-          Save/Load
-        </button>
-      )}
+      {/* Secondary actions grouped */}
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        {onToggleSaveLoad && (
+          <button onClick={onToggleSaveLoad} style={btnStyle}>
+            Save/Load
+          </button>
+        )}
 
-      {/* New Game */}
-      <button
-        onClick={showSetupScreen}
-        style={{
-          padding: '4px 8px',
-          borderRadius: 4,
-          border: '1px solid #334155',
-          background: 'transparent',
-          color: '#94a3b8',
-          cursor: 'pointer',
-          fontSize: 12,
-        }}
-      >
-        New Game
-      </button>
-
-      {/* Acceptance checklist toggle */}
-      {onToggleChecklist && (
-        <button
-          onClick={onToggleChecklist}
-          title="Acceptance Criteria Checklist"
-          style={{
-            padding: '4px 8px',
-            borderRadius: 4,
-            border: '1px solid #334155',
-            background: 'transparent',
-            color: '#94a3b8',
-            cursor: 'pointer',
-            fontSize: 14,
-          }}
-        >
-          &#9745;
+        <button onClick={showSetupScreen} style={btnStyle}>
+          New Game
         </button>
-      )}
+
+        {onToggleChecklist && (
+          <button
+            onClick={onToggleChecklist}
+            title="Acceptance Criteria Checklist"
+            style={{ ...btnStyle, fontSize: 14 }}
+          >
+            &#9745;
+          </button>
+        )}
+      </div>
     </div>
   )
 }

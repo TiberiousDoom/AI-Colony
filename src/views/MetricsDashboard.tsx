@@ -17,6 +17,7 @@ import type { SimulationEvent } from '../simulation/simulation-engine.ts'
 import { perCapitaProsperity } from '../utils/scoring.ts'
 import { EvolutionaryAI } from '../simulation/ai/evolutionary-ai.ts'
 import { TIMING } from '../config/game-constants.ts'
+import { useIsMobile } from '../hooks/useIsMobile.ts'
 
 const VILLAGE_COLORS: Record<string, string> = {
   utility: '#3b82f6',
@@ -28,6 +29,7 @@ const VILLAGE_COLORS: Record<string, string> = {
 export function MetricsDashboard() {
   const compState = useSimulationStore(s => s.competitionState)
   const [showPerCapita, setShowPerCapita] = useState(false)
+  const mobile = useIsMobile()
 
   if (!compState) {
     return (
@@ -60,39 +62,43 @@ export function MetricsDashboard() {
   const chartData = buildOverlaidChartData(villages, maxSnapshots)
   const dayTicks = getDayTicks(maxSnapshots)
 
+  const chartHeight = mobile ? 140 : 180
+  const chartPad = mobile ? 10 : 16
+  const chartStyle = { background: '#1e293b', borderRadius: 8, padding: chartPad }
+
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: '1fr 280px',
+      gridTemplateColumns: mobile ? '1fr' : '1fr 280px',
       gridTemplateRows: 'auto 1fr auto',
-      gap: 16,
-      padding: 16,
+      gap: mobile ? 10 : 16,
+      padding: mobile ? 8 : 16,
       height: '100%',
       overflow: 'auto',
     }}>
       {/* KPI Cards — one row per village */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, gridColumn: '1 / -1' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: mobile ? 6 : 8, gridColumn: '1 / -1' }}>
         {villages.map(village => {
           const alive = village.villagers.filter(v => v.alive)
           const latestSnap = village.history.daily[village.history.daily.length - 1]
           const color = VILLAGE_COLORS[village.id] ?? '#94a3b8'
 
           return (
-            <div key={village.id} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div key={village.id} style={{ display: 'flex', gap: mobile ? 6 : 12, flexWrap: 'wrap', alignItems: 'center' }}>
               <div style={{
-                fontSize: 12, color, fontWeight: 700,
+                fontSize: mobile ? 11 : 12, color, fontWeight: 700,
                 textTransform: 'uppercase', letterSpacing: 1,
-                minWidth: 100, opacity: village.isEliminated ? 0.5 : 1,
+                minWidth: mobile ? 80 : 100, opacity: village.isEliminated ? 0.5 : 1,
               }}>
                 {village.name}
                 {village.isEliminated && ' (X)'}
               </div>
-              <KPICard label="Pop" value={alive.length} villageColor={color} eliminated={village.isEliminated} />
-              <KPICard label="Prosperity" value={latestSnap?.prosperityScore ?? 0} color="#3b82f6" villageColor={color} eliminated={village.isEliminated} />
-              <KPICard label="Food" value={village.stockpile.food} color="#facc15" villageColor={color} eliminated={village.isEliminated} />
-              <KPICard label="Wood" value={village.stockpile.wood} color="#a78bfa" villageColor={color} eliminated={village.isEliminated} />
-              <KPICard label="Stone" value={village.stockpile.stone} color="#94a3b8" villageColor={color} eliminated={village.isEliminated} />
-              <KPICard label="Health" value={latestSnap?.avgHealth ?? 0} color="#f87171" villageColor={color} eliminated={village.isEliminated} />
+              <KPICard label="Pop" value={alive.length} villageColor={color} eliminated={village.isEliminated} compact={mobile} />
+              <KPICard label="Prosperity" value={latestSnap?.prosperityScore ?? 0} color="#3b82f6" villageColor={color} eliminated={village.isEliminated} compact={mobile} />
+              <KPICard label="Food" value={village.stockpile.food} color="#facc15" villageColor={color} eliminated={village.isEliminated} compact={mobile} />
+              <KPICard label="Wood" value={village.stockpile.wood} color="#a78bfa" villageColor={color} eliminated={village.isEliminated} compact={mobile} />
+              <KPICard label="Stone" value={village.stockpile.stone} color="#94a3b8" villageColor={color} eliminated={village.isEliminated} compact={mobile} />
+              <KPICard label="Health" value={latestSnap?.avgHealth ?? 0} color="#f87171" villageColor={color} eliminated={village.isEliminated} compact={mobile} />
               {village.aiSystem instanceof EvolutionaryAI && (() => {
                 const genome = village.aiSystem.getGenome()
                 return (
@@ -107,13 +113,13 @@ export function MetricsDashboard() {
       </div>
 
       {/* Charts */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: mobile ? 10 : 16, minWidth: 0 }}>
         {/* Population Chart */}
-        <div data-testid="chart-population" style={{ background: '#1e293b', borderRadius: 8, padding: 16 }}>
+        <div data-testid="chart-population" style={chartStyle}>
           <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
             Population Over Time
           </div>
-          <ResponsiveContainer width="100%" height={180}>
+          <ResponsiveContainer width="100%" height={chartHeight}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
               <XAxis dataKey="day" stroke="#64748b" fontSize={11} ticks={dayTicks} type="number" domain={['dataMin', 'dataMax']} tickFormatter={(v: number) => String(Math.round(v))} />
@@ -136,11 +142,11 @@ export function MetricsDashboard() {
         </div>
 
         {/* Resource Stockpiles Chart */}
-        <div data-testid="chart-resources" style={{ background: '#1e293b', borderRadius: 8, padding: 16 }}>
+        <div data-testid="chart-resources" style={chartStyle}>
           <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
             Food Stockpiles
           </div>
-          <ResponsiveContainer width="100%" height={180}>
+          <ResponsiveContainer width="100%" height={chartHeight}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
               <XAxis dataKey="day" stroke="#64748b" fontSize={11} ticks={dayTicks} type="number" domain={['dataMin', 'dataMax']} tickFormatter={(v: number) => String(Math.round(v))} />
@@ -163,11 +169,11 @@ export function MetricsDashboard() {
         </div>
 
         {/* Activity Breakdown — side by side bars */}
-        <div data-testid="chart-activity" style={{ background: '#1e293b', borderRadius: 8, padding: 16 }}>
+        <div data-testid="chart-activity" style={chartStyle}>
           <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
             Current Activity
           </div>
-          <ResponsiveContainer width="100%" height={180}>
+          <ResponsiveContainer width="100%" height={chartHeight}>
             <BarChart data={computeActivityData(villages)}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
               <XAxis dataKey="action" stroke="#64748b" fontSize={10} />
@@ -188,7 +194,7 @@ export function MetricsDashboard() {
         </div>
 
         {/* Prosperity Score Chart */}
-        <div data-testid="chart-prosperity" style={{ background: '#1e293b', borderRadius: 8, padding: 16 }}>
+        <div data-testid="chart-prosperity" style={chartStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <div style={{ fontSize: 12, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1 }}>
               {showPerCapita ? 'Per-Capita Prosperity' : 'Prosperity Score'}
@@ -203,7 +209,7 @@ export function MetricsDashboard() {
               Per-capita
             </label>
           </div>
-          <ResponsiveContainer width="100%" height={180}>
+          <ResponsiveContainer width="100%" height={chartHeight}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
               <XAxis dataKey="day" stroke="#64748b" fontSize={11} ticks={dayTicks} type="number" domain={['dataMin', 'dataMax']} tickFormatter={(v: number) => String(Math.round(v))} />

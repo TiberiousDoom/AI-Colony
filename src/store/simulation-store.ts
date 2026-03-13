@@ -118,21 +118,12 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
     }
   }
 
-  // When the tab becomes visible again, immediately run a catch-up tick.
-  // Some browsers fully suspend setInterval for background tabs, so the
-  // interval callback may not have fired at all while hidden.
+  // Pause simulation when the browser tab is hidden (e.g. user switches apps).
+  // Resetting lastTimestamp ensures no catch-up burst when the tab returns.
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      const store = get()
-      if (store.isRunning && engine && lastTimestamp > 0) {
-        const now = Date.now()
-        const delta = now - lastTimestamp
-        lastTimestamp = now
-        accumulator += delta * store.speed
-        if (processAccumulatedTicks()) {
-          publishState(set)
-        }
-      }
+    if (document.visibilityState === 'hidden') {
+      lastTimestamp = 0
+      accumulator = 0
     }
   })
 
