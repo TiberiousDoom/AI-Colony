@@ -863,6 +863,11 @@ export class CompetitionEngine {
           if (doubleOld && doubleOld.prosperityScore > 0) {
             const longChange = Math.abs(recent.prosperityScore - doubleOld.prosperityScore) / doubleOld.prosperityScore
             if (longChange < STAGNATION_THRESHOLD) {
+              // Global cooldown: don't stack forced events from different villages
+              const recentGlobalForced = this.state.globalEvents.some(
+                e => e.type === 'random_event' && e.message.includes('stagnation breaker') && e.day >= this.state.dayCount - 5,
+              )
+              if (recentGlobalForced) continue
               const alreadyForced = village.events.some(
                 e => e.type === 'random_event' && e.message.includes('stagnation breaker') && e.day >= this.state.dayCount - STAGNATION_WINDOW,
               )
@@ -884,18 +889,20 @@ export class CompetitionEngine {
   }
 
   private inferCauseOfDeath(village: VillageState): string {
-    if (this.state.season === 'winter') {
-      return `perished during winter, day ${this.state.dayCount + 1}`
-    }
-    if (village.stockpile.food <= 0) {
-      return `starvation, day ${this.state.dayCount + 1}`
-    }
+    // Check active threats first — monsters/predators are immediate causes
     if (village.monsters.length > 0) {
       return `monster attack, day ${this.state.dayCount + 1}`
     }
     const hadPredator = this.state.activeEvents.some(e => e.type === 'predator')
     if (hadPredator) {
       return `predator attack, day ${this.state.dayCount + 1}`
+    }
+    // Environmental causes
+    if (this.state.season === 'winter') {
+      return `perished during winter, day ${this.state.dayCount + 1}`
+    }
+    if (village.stockpile.food <= 0) {
+      return `starvation, day ${this.state.dayCount + 1}`
     }
     return `all villagers lost, day ${this.state.dayCount + 1}`
   }
