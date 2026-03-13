@@ -161,11 +161,14 @@ export function shouldFight(
   villagerHealth: number,
   monster: { hp: number; maxHp: number; damage: number },
   alliesNear: number,
+  hasWeapon: boolean = false,
 ): boolean {
   const healthOk = villagerHealth > 40
   const hasAllies = alliesNear >= 2  // counting self, so 2 means at least 1 ally
   const monsterWeak = monster.hp < monster.maxHp * 0.5
   const monsterLowDamage = monster.damage <= 3  // wolf/goblin/snake level
+  // Armed villagers are braver — fight solo against low-damage monsters
+  if (hasWeapon && healthOk && monster.damage <= 4) return true
   // Fight if: healthy with allies, or healthy vs low-damage monster, or monster is weak
   return (healthOk && hasAllies) || (healthOk && monsterLowDamage) || monsterWeak
 }

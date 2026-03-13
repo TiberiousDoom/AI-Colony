@@ -42,6 +42,8 @@ import {
   getMonsterLoot,
 } from './monster.ts'
 import { isAtStructure } from './structures.ts'
+import { getWeaponBonusDamage, getArmorReduction } from './equipment.ts'
+import type { WeaponType, ArmorType } from './equipment.ts'
 
 const SEASONS: Season[] = ['spring', 'summer', 'autumn', 'winter']
 const VICTORY_LAP_DAYS = COMPETITION.VICTORY_LAP_DAYS
@@ -380,6 +382,7 @@ export class CompetitionEngine {
           // Uses range 2 (not just adjacency) to account for monster movement during attack windup
           if (villager.currentAction === 'attack') {
             const attackRange = MONSTERS.ATTACK_RANGE + 1 // slight leniency for movement
+            const totalDamage = MONSTERS.VILLAGER_BASE_ATTACK_DAMAGE + getWeaponBonusDamage(villager.equipment)
             let hit = false
             // Try original target first
             if (villager.attackTargetMonsterId) {
@@ -387,7 +390,7 @@ export class CompetitionEngine {
               if (targetMonster) {
                 const dist = Math.abs(villager.position.x - targetMonster.position.x) + Math.abs(villager.position.y - targetMonster.position.y)
                 if (dist <= attackRange) {
-                  damageMonster(targetMonster, MONSTERS.VILLAGER_BASE_ATTACK_DAMAGE)
+                  damageMonster(targetMonster, totalDamage)
                   hit = true
                 }
               }
@@ -405,10 +408,24 @@ export class CompetitionEngine {
                 }
               }
               if (bestMonster) {
-                damageMonster(bestMonster, MONSTERS.VILLAGER_BASE_ATTACK_DAMAGE)
+                damageMonster(bestMonster, totalDamage)
               }
             }
             villager.attackTargetMonsterId = undefined
+          }
+
+          // Crafted equipment: pick up marker and assign to villager
+          if (villager.currentAction === 'craft_weapon' || villager.currentAction === 'craft_armor') {
+            const crafted = (villager as Villager & { _craftedEquipment?: { slot: 'weapon' | 'armor'; type: WeaponType | ArmorType } })._craftedEquipment
+            if (crafted) {
+              if (crafted.slot === 'weapon') {
+                villager.equipment.weapon = crafted.type as WeaponType
+              } else {
+                villager.equipment.armor = crafted.type as ArmorType
+              }
+              this.addVillageEvent(village, 'structure_built', `${villager.name} crafted ${crafted.type.replace(/_/g, ' ')}`)
+              delete (villager as Villager & { _craftedEquipment?: unknown })._craftedEquipment
+            }
           }
 
           this.tryAutoDeposit(villager, village)
@@ -447,7 +464,8 @@ export class CompetitionEngine {
           // Sheltered villagers (resting at shelter) take no monster damage
           const sheltered = target.currentAction === 'rest' && isAtStructure(target.position, village.structures, 'shelter')
           if (!sheltered) {
-            health.current -= monster.damage * damageReduction
+            const armorMult = 1 - getArmorReduction(target.equipment)
+            health.current -= monster.damage * damageReduction * armorMult
             clampNeed(health)
           }
           monster.lastAttackTick = this.state.tick

@@ -278,7 +278,7 @@ function computeActivityData(villages: VillageState[]) {
     'idle', 'forage', 'eat', 'rest', 'chop_wood', 'mine_stone',
     'haul', 'fish', 'flee', 'build_shelter', 'build_storage', 'warm_up',
     'build_watchtower', 'build_farm', 'build_wall', 'build_well',
-    'cool_down',
+    'cool_down', 'attack', 'craft_weapon', 'craft_armor',
   ]
 
   return order

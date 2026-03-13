@@ -10,6 +10,7 @@ import { NeedType, getNeed } from '../villager.ts'
 import { TileType } from '../world.ts'
 import { type Genome, ACTION_LIST } from './genome.ts'
 import { findNearestMonsterToVillager, countAlliesNearMonster, shouldFight } from '../monster.ts'
+import { bestCraftableWeapon, bestCraftableArmor } from '../equipment.ts'
 
 /** Urgency curve matching Utility AI: (1 - value/100)^2 */
 function urgencyCurve(value: number): number {
@@ -46,6 +47,8 @@ const ACTION_NEED_RELEVANCE: Record<string, boolean[]> = {
   build_well:      [false, false, false, false],
   cool_down:       [false, false, false, false],
   attack:          [false, false, true,  false],
+  craft_weapon:    [false, false, true,  false],
+  craft_armor:     [false, false, true,  false],
 }
 
 /** Whether an action is outdoors (affected by night penalty) */
@@ -125,6 +128,8 @@ function findTargetForAction(action: VillagerAction, villager: Readonly<Villager
     case 'build_well':
     case 'warm_up':
     case 'cool_down':
+    case 'craft_weapon':
+    case 'craft_armor':
       return { ...worldView.campfirePosition }
     case 'build_farm': {
       const fertile = worldView.world.findTilesInRadius(
@@ -234,6 +239,16 @@ export class EvolutionaryAI implements IAISystem {
           scored.push({ action: actionType, score: -999, reason: 'no monster' })
           continue
         }
+      }
+
+      // Suppress crafting when no upgrade available
+      if (actionType === 'craft_weapon' && !bestCraftableWeapon(worldView.stockpile, villager.equipment.weapon)) {
+        scored.push({ action: actionType, score: -999, reason: 'no weapon to craft' })
+        continue
+      }
+      if (actionType === 'craft_armor' && !bestCraftableArmor(worldView.stockpile, villager.equipment.armor)) {
+        scored.push({ action: actionType, score: -999, reason: 'no armor to craft' })
+        continue
       }
 
       // Need-based scoring using genome weights
@@ -381,7 +396,7 @@ export class EvolutionaryAI implements IAISystem {
         if (envW[6] > 0.5 && health.current > 40 && alliesNear >= 2) {
           score += 1.5
           parts.push('fight monster +1.5')
-        } else if (shouldFight(health.current, nearestMonster, alliesNear)) {
+        } else if (shouldFight(health.current, nearestMonster, alliesNear, villager.equipment.weapon !== null)) {
           score += 1.0
           parts.push('fight (heuristic) +1.0')
         }
@@ -389,9 +404,39 @@ export class EvolutionaryAI implements IAISystem {
 
       if (actionType === 'flee' && nearestMonster && monsterDist <= 5) {
         const alliesNear = countAlliesNearMonster(nearestMonster.position, worldView.villagers)
-        if (!shouldFight(health.current, nearestMonster, alliesNear)) {
+        if (!shouldFight(health.current, nearestMonster, alliesNear, villager.equipment.weapon !== null)) {
           score += 2.0
           parts.push('flee monster +2.0')
+        }
+      }
+
+      // Crafting: boost when monsters exist and unarmed/unarmored
+      if (actionType === 'craft_weapon') {
+        const hasMonsters = (worldView.monsters ?? []).some(m => m.behaviorState !== 'dead')
+        if (hasMonsters && !villager.equipment.weapon) {
+          score += 1.0
+          parts.push('unarmed + monsters +1.0')
+        } else if (!villager.equipment.weapon) {
+          score += 0.3
+          parts.push('unarmed, prepare +0.3')
+        }
+        if (hunger.current < 30 || energy.current < 30) {
+          score -= 1.0
+          parts.push('survival priority -1.0')
+        }
+      }
+      if (actionType === 'craft_armor') {
+        const hasMonsters = (worldView.monsters ?? []).some(m => m.behaviorState !== 'dead')
+        if (hasMonsters && !villager.equipment.armor) {
+          score += 0.8
+          parts.push('unarmored + monsters +0.8')
+        } else if (!villager.equipment.armor) {
+          score += 0.2
+          parts.push('unarmored, prepare +0.2')
+        }
+        if (hunger.current < 30 || energy.current < 30) {
+          score -= 1.0
+          parts.push('survival priority -1.0')
         }
       }
 

@@ -150,6 +150,19 @@ export class VillagerRenderer {
         entry.statusIcon.visible = true
       }
 
+      // Equipment indicators (small dots below health bar)
+      if (v.equipment) {
+        const equipY = entry.sprite.y - this.tileSize / 2 - 1
+        if (v.equipment.weapon) {
+          entry.statusIcon.circle(entry.sprite.x - 3, equipY, 2).fill(0xff8c00) // orange = weapon
+          entry.statusIcon.visible = true
+        }
+        if (v.equipment.armor) {
+          entry.statusIcon.circle(entry.sprite.x + 3, equipY, 2).fill(0x4a9eff) // blue = armor
+          entry.statusIcon.visible = true
+        }
+      }
+
       // Carried resource indicator
       if (v.carrying) {
         const dotColor = v.carrying.type === 'food' ? 0x44aa44 : v.carrying.type === 'wood' ? 0x8b4513 : 0x888888

@@ -38,6 +38,8 @@ const ACTION_TO_ANIM: Record<VillagerAction, string> = {
   cool_down: 'rest',
   flee: 'flee',
   attack: 'work',
+  craft_weapon: 'work',
+  craft_armor: 'work',
 }
 
 /** Maps a villager action to an animation name */

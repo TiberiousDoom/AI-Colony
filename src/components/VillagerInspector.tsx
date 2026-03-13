@@ -105,6 +105,14 @@ export function VillagerInspector({ villager, villageName, villageColor, aiName,
               Carrying: {villager.carrying.amount} {villager.carrying.type}
             </div>
           )}
+          {villager.equipment && (villager.equipment.weapon || villager.equipment.armor) && (
+            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>
+              Equipment: {[
+                villager.equipment.weapon && villager.equipment.weapon.replace(/_/g, ' '),
+                villager.equipment.armor && villager.equipment.armor.replace(/_/g, ' '),
+              ].filter(Boolean).join(', ')}
+            </div>
+          )}
           {villager.statusEffects && villager.statusEffects.length > 0 && (
             <div style={{ fontSize: 12, color: '#f87171' }}>
               {villager.statusEffects.map((e, i) => (

@@ -160,3 +160,17 @@ export const COMPETITION = {
   STAGNATION_THRESHOLD: 0.05,
   FLEE_SPEED_MULTIPLIER: 2,
 } as const
+
+// --- Crafting & Equipment ---
+
+export const CRAFTING = {
+  ENERGY_COST_PER_TICK: 2,
+  EQUIPMENT: {
+    wooden_spear:   { type: 'wooden_spear'   as const, slot: 'weapon' as const, cost: { wood: 10, stone: 0 },  craftTicks: 6,  bonusDamage: 4,  damageReduction: 0 },
+    stone_axe:      { type: 'stone_axe'      as const, slot: 'weapon' as const, cost: { wood: 5,  stone: 8 },  craftTicks: 8,  bonusDamage: 8,  damageReduction: 0 },
+    stone_sword:    { type: 'stone_sword'     as const, slot: 'weapon' as const, cost: { wood: 3,  stone: 12 }, craftTicks: 10, bonusDamage: 12, damageReduction: 0 },
+    leather_tunic:  { type: 'leather_tunic'   as const, slot: 'armor'  as const, cost: { wood: 8,  stone: 0 },  craftTicks: 6,  bonusDamage: 0,  damageReduction: 0.15 },
+    wooden_shield:  { type: 'wooden_shield'   as const, slot: 'armor'  as const, cost: { wood: 12, stone: 0 },  craftTicks: 8,  bonusDamage: 0,  damageReduction: 0.25 },
+    stone_mail:     { type: 'stone_mail'      as const, slot: 'armor'  as const, cost: { wood: 5,  stone: 10 }, craftTicks: 10, bonusDamage: 0,  damageReduction: 0.40 },
+  },
+} as const
