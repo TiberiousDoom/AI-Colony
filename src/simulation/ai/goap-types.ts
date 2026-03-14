@@ -36,6 +36,10 @@ export interface GOAPWorldState {
   // Infrastructure
   needs_building: boolean
 
+  // Equipment
+  has_weapon: boolean
+  has_armor: boolean
+
   // Situational
   predator_nearby: boolean
   monster_nearby: boolean

@@ -4,6 +4,7 @@
 
 import type { SeededRNG } from '../utils/seed.ts'
 import { NEEDS, STOCKPILE, POPULATION } from '../config/game-constants.ts'
+import { type VillagerEquipment, createDefaultEquipment } from './equipment.ts'
 
 // --- Position ---
 
@@ -56,6 +57,8 @@ export type VillagerAction =
   | 'build_well'
   | 'cool_down'
   | 'attack'
+  | 'craft_weapon'
+  | 'craft_armor'
 
 // --- Villager ---
 
@@ -77,6 +80,8 @@ export interface Villager {
   carrying: { type: 'food' | 'wood' | 'stone'; amount: number } | null
   /** Active status effects (illness, etc.) */
   statusEffects: Array<{ type: 'illness'; ticksRemaining: number }>
+  /** Equipped weapon and armor */
+  equipment: VillagerEquipment
   /** Monster being attacked (set by AI, used by engine to resolve combat) */
   attackTargetMonsterId?: string
   /** Last AI decision (for inspector display) */
@@ -136,6 +141,7 @@ export function createVillager(id: string, name: string, x: number, y: number, h
     alive: true,
     carrying: null,
     statusEffects: [],
+    equipment: createDefaultEquipment(),
   }
 }
 

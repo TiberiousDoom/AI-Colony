@@ -9,6 +9,7 @@ import { NeedType, getNeed } from '../villager.ts'
 import { TileType } from '../world.ts'
 import { getAllActions, type ActionDefinition } from '../actions.ts'
 import { findNearestMonsterToVillager, countAlliesNearMonster, shouldFight } from '../monster.ts'
+import { bestCraftableWeapon, bestCraftableArmor } from '../equipment.ts'
 
 // --- Urgency Curve ---
 
@@ -45,6 +46,8 @@ const WEIGHTS: Record<string, ActionWeights> = {
   build_wall:       { hunger: 0.0, energy: 0.1, health: 0.3, warmth: 0.0 },
   build_well:       { hunger: 0.2, energy: 0.1, health: 0.1, warmth: 0.0 },
   attack:           { hunger: 0.0, energy: 0.1, health: 0.8, warmth: 0.0 },
+  craft_weapon:     { hunger: 0.0, energy: 0.1, health: 0.3, warmth: 0.0 },
+  craft_armor:      { hunger: 0.0, energy: 0.1, health: 0.3, warmth: 0.0 },
 }
 
 // --- Score Calculation ---
@@ -130,7 +133,7 @@ function scoreAction(
     if (nearestMonster && monsterDist <= 5) {
       const alliesNear = countAlliesNearMonster(nearestMonster.position, worldView.villagers)
       const villagerHealth = health.current
-      if (shouldFight(villagerHealth, nearestMonster, alliesNear)) {
+      if (shouldFight(villagerHealth, nearestMonster, alliesNear, villager.equipment.weapon !== null)) {
         envMod += 1.5
         reasons.push('fight monster +1.5')
         if (nearestMonster.hp < nearestMonster.maxHp * 0.5) {
@@ -146,7 +149,7 @@ function scoreAction(
     // Monster flee
     if (nearestMonster && monsterDist <= 5) {
       const alliesNear = countAlliesNearMonster(nearestMonster.position, worldView.villagers)
-      if (!shouldFight(health.current, nearestMonster, alliesNear)) {
+      if (!shouldFight(health.current, nearestMonster, alliesNear, villager.equipment.weapon !== null)) {
         envMod += 2.0
         reasons.push('flee monster +2.0')
       }
@@ -227,6 +230,39 @@ function scoreAction(
     if (!hasWellStruct && worldView.stockpile.stone >= 20) {
       envMod += 0.2
       reasons.push('need well +0.2')
+    }
+  }
+
+  // Craft weapon: boost when monsters exist and villager unarmed
+  if (action.type === 'craft_weapon') {
+    const hasMonsters = worldView.monsters.some(m => m.behaviorState !== 'dead')
+    if (hasMonsters && !villager.equipment.weapon && bestCraftableWeapon(worldView.stockpile, villager.equipment.weapon)) {
+      envMod += 1.0
+      reasons.push('unarmed + monsters +1.0')
+    } else if (!villager.equipment.weapon && bestCraftableWeapon(worldView.stockpile, villager.equipment.weapon)) {
+      envMod += 0.3
+      reasons.push('unarmed, prepare +0.3')
+    }
+    // Suppress when survival needs critical
+    if (hunger.current < 30 || energy.current < 30) {
+      envMod -= 1.0
+      reasons.push('survival priority -1.0')
+    }
+  }
+
+  // Craft armor: boost when monsters exist and villager unarmored
+  if (action.type === 'craft_armor') {
+    const hasMonsters = worldView.monsters.some(m => m.behaviorState !== 'dead')
+    if (hasMonsters && !villager.equipment.armor && bestCraftableArmor(worldView.stockpile, villager.equipment.armor)) {
+      envMod += 0.8
+      reasons.push('unarmored + monsters +0.8')
+    } else if (!villager.equipment.armor && bestCraftableArmor(worldView.stockpile, villager.equipment.armor)) {
+      envMod += 0.2
+      reasons.push('unarmored, prepare +0.2')
+    }
+    if (hunger.current < 30 || energy.current < 30) {
+      envMod -= 1.0
+      reasons.push('survival priority -1.0')
     }
   }
 
@@ -321,6 +357,9 @@ function findTargetForAction(
     case 'build_wall':
     case 'build_well':
     case 'warm_up':
+      return { ...worldView.campfirePosition }
+    case 'craft_weapon':
+    case 'craft_armor':
       return { ...worldView.campfirePosition }
     case 'build_farm': {
       const fertile = worldView.world.findTilesInRadius(

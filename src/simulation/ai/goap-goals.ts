@@ -7,6 +7,7 @@ import { NeedType, getNeed } from '../villager.ts'
 import type { AIWorldView } from './ai-interface.ts'
 import type { GOAPGoal, GOAPWorldState } from './goap-types.ts'
 import { findNearestMonsterToVillager, countAlliesNearMonster, shouldFight } from '../monster.ts'
+import { bestCraftableWeapon, bestCraftableArmor } from '../equipment.ts'
 
 export const GOAP_GOALS: GOAPGoal[] = [
   {
@@ -18,7 +19,7 @@ export const GOAP_GOALS: GOAPGoal[] = [
         const monster = findNearestMonsterToVillager(villager, wv.monsters)
         if (monster) {
           const allies = countAlliesNearMonster(monster.position, wv.villagers)
-          if (!shouldFight(health.current, monster, allies)) return 2.0
+          if (!shouldFight(health.current, monster, allies, villager.equipment.weapon !== null)) return 2.0
         }
       }
       return state.predator_nearby ? 2.0 : 0
@@ -33,7 +34,7 @@ export const GOAP_GOALS: GOAPGoal[] = [
       const monster = findNearestMonsterToVillager(villager, wv.monsters)
       if (!monster) return 0
       const allies = countAlliesNearMonster(monster.position, wv.villagers)
-      if (shouldFight(health.current, monster, allies)) return 1.8
+      if (shouldFight(health.current, monster, allies, villager.equipment.weapon !== null)) return 1.8
       return 0
     },
   },
@@ -79,6 +80,28 @@ export const GOAP_GOALS: GOAPGoal[] = [
     priority: (_v, wv, state) => {
       if (!state.stockpile_wood_low) return 0
       return wv.stockpile.wood < 5 ? 0.4 : 0.2
+    },
+  },
+  {
+    name: 'EquipForCombat',
+    desiredState: { has_weapon: true },
+    priority: (villager, wv, state) => {
+      if (state.has_weapon) return 0
+      const hasMonsters = wv.monsters.some(m => m.behaviorState !== 'dead')
+      if (hasMonsters && bestCraftableWeapon(wv.stockpile, villager.equipment.weapon)) return 1.2
+      if (bestCraftableWeapon(wv.stockpile, villager.equipment.weapon)) return 0.15
+      return 0
+    },
+  },
+  {
+    name: 'EquipArmor',
+    desiredState: { has_armor: true },
+    priority: (villager, wv, state) => {
+      if (state.has_armor) return 0
+      const hasMonsters = wv.monsters.some(m => m.behaviorState !== 'dead')
+      if (hasMonsters && bestCraftableArmor(wv.stockpile, villager.equipment.armor)) return 1.0
+      if (bestCraftableArmor(wv.stockpile, villager.equipment.armor)) return 0.1
+      return 0
     },
   },
   {

@@ -76,6 +76,8 @@ export function snapshotWorldState(villager: Readonly<Villager>, worldView: AIWo
       return false
     })(),
 
+    has_weapon: villager.equipment.weapon !== null,
+    has_armor: villager.equipment.armor !== null,
     predator_nearby: predatorNearby,
     monster_nearby: (worldView.monsters ?? []).some(m => {
       const dist = Math.abs(vx - m.position.x) + Math.abs(vy - m.position.y)

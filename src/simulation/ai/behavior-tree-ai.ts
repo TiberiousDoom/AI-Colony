@@ -29,6 +29,7 @@ import { NeedType, getNeed } from '../villager.ts'
 import { TileType } from '../world.ts'
 import { Selector, Sequence, Condition, ActionNode, type BTNode, type BTContext } from './behavior-tree.ts'
 import { findNearestMonsterToVillager, countAlliesNearMonster, shouldFight } from '../monster.ts'
+import { bestCraftableWeapon, bestCraftableArmor } from '../equipment.ts'
 
 // --- Target Finders ---
 
@@ -142,7 +143,7 @@ function buildVillagerTree(villager: Readonly<Villager>, wv: AIWorldView): BTNod
         if (dist > 5) return false
         const alliesNear = countAlliesNearMonster(monster.position, wv.villagers)
         const health = getNeed(villager as Villager, NeedType.Health)
-        return shouldFight(health.current, monster, alliesNear)
+        return shouldFight(health.current, monster, alliesNear, villager.equipment.weapon !== null)
       }),
       new ActionNode((ctx) => {
         const monster = findNearestMonsterToVillager(villager, ctx.worldView.monsters)
@@ -362,6 +363,32 @@ function buildVillagerTree(villager: Readonly<Villager>, wv: AIWorldView): BTNod
     ]),
   ])
 
+  // Crafting branch: craft weapon/armor when monsters exist and unarmed/unarmored
+  const crafting = new Selector([
+    new Sequence([
+      new Condition((ctx) => {
+        const hasMonsters = ctx.worldView.monsters.some(m => m.behaviorState !== 'dead')
+        return hasMonsters && !villager.equipment.weapon && bestCraftableWeapon(ctx.worldView.stockpile, villager.equipment.weapon) !== null
+      }),
+      new ActionNode((ctx) => ({
+        action: 'craft_weapon' as const,
+        targetPosition: { ...ctx.worldView.campfirePosition },
+        reason: 'BT: monsters present, unarmed → craft weapon',
+      })),
+    ]),
+    new Sequence([
+      new Condition((ctx) => {
+        const hasMonsters = ctx.worldView.monsters.some(m => m.behaviorState !== 'dead')
+        return hasMonsters && !villager.equipment.armor && bestCraftableArmor(ctx.worldView.stockpile, villager.equipment.armor) !== null
+      }),
+      new ActionNode((ctx) => ({
+        action: 'craft_armor' as const,
+        targetPosition: { ...ctx.worldView.campfirePosition },
+        reason: 'BT: monsters present, unarmored → craft armor',
+      })),
+    ]),
+  ])
+
   // Idle / fallback branch
   const idle = new ActionNode((ctx) => {
     const energy = getNeed(villager as Villager, NeedType.Energy)
@@ -386,6 +413,7 @@ function buildVillagerTree(villager: Readonly<Villager>, wv: AIWorldView): BTNod
     combat,
     criticalNeeds,
     hauling,
+    crafting,
     villageTasks,
     idle,
   ])

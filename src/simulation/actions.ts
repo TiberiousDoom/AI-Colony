@@ -8,6 +8,8 @@ import { getNeed, NeedType, clampNeed } from './villager.ts'
 import type { World } from './world.ts'
 import { TileType } from './world.ts'
 import { STRUCTURE_COSTS, type StructureType } from './structures.ts'
+import { bestCraftableWeapon, bestCraftableArmor, deductEquipmentCost } from './equipment.ts'
+import type { WeaponType, ArmorType } from './equipment.ts'
 
 export type TimeOfDay = 'day' | 'night'
 export type { Season } from './villager.ts'
@@ -419,6 +421,42 @@ export const BUILD_WELL_ACTION = makeAction(
   },
 )
 
+// --- Crafting Actions ---
+
+export const CRAFT_WEAPON_ACTION = makeAction(
+  'craft_weapon', 8, 2,
+  (v, _w, stockpile, campfire) => {
+    if (!isAtOrAdjacent(v.position.x, v.position.y, campfire.x, campfire.y)) return false
+    return bestCraftableWeapon(stockpile, v.equipment.weapon) !== null
+  },
+  (v, _w, stockpile) => {
+    const weapon = bestCraftableWeapon(stockpile, v.equipment.weapon)
+    if (!weapon) return
+    deductEquipmentCost(stockpile, weapon)
+    ;(v as Villager & { _craftedEquipment?: { slot: 'weapon'; type: WeaponType } })._craftedEquipment = {
+      slot: 'weapon',
+      type: weapon,
+    }
+  },
+)
+
+export const CRAFT_ARMOR_ACTION = makeAction(
+  'craft_armor', 8, 2,
+  (v, _w, stockpile, campfire) => {
+    if (!isAtOrAdjacent(v.position.x, v.position.y, campfire.x, campfire.y)) return false
+    return bestCraftableArmor(stockpile, v.equipment.armor) !== null
+  },
+  (v, _w, stockpile) => {
+    const armor = bestCraftableArmor(stockpile, v.equipment.armor)
+    if (!armor) return
+    deductEquipmentCost(stockpile, armor)
+    ;(v as Villager & { _craftedEquipment?: { slot: 'armor'; type: ArmorType } })._craftedEquipment = {
+      slot: 'armor',
+      type: armor,
+    }
+  },
+)
+
 // --- Action Registry ---
 
 const ACTION_MAP = new Map<VillagerAction, ActionDefinition>([
@@ -440,6 +478,8 @@ const ACTION_MAP = new Map<VillagerAction, ActionDefinition>([
   ['build_well', BUILD_WELL_ACTION],
   ['cool_down', COOL_DOWN_ACTION],
   ['attack', ATTACK_ACTION],
+  ['craft_weapon', CRAFT_WEAPON_ACTION],
+  ['craft_armor', CRAFT_ARMOR_ACTION],
 ])
 
 export function getActionDefinition(action: VillagerAction): ActionDefinition | undefined {

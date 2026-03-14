@@ -9,6 +9,7 @@ import type { AIWorldView } from './ai-interface.ts'
 import type { GOAPAction } from './goap-types.ts'
 import { getNeed, NeedType } from '../villager.ts'
 import { findNearestMonsterToVillager, countAlliesNearMonster } from '../monster.ts'
+import { bestCraftableWeapon, bestCraftableArmor } from '../equipment.ts'
 
 // --- Target finders (reusable) ---
 
@@ -217,6 +218,26 @@ export const GOAP_ACTIONS: GOAPAction[] = [
       return monster ? { x: monster.position.x, y: monster.position.y } : undefined
     },
     runtimeCheck: (_v, wv) => (wv.monsters ?? []).some(m => m.behaviorState !== 'dead'),
+  },
+
+  // Crafting
+  {
+    name: 'CraftWeapon',
+    preconditions: { has_weapon: false },
+    effects: { has_weapon: true },
+    cost: 6,
+    villagerAction: 'craft_weapon',
+    targetFinder: campfireTarget,
+    runtimeCheck: (v, wv) => bestCraftableWeapon(wv.stockpile, v.equipment.weapon) !== null,
+  },
+  {
+    name: 'CraftArmor',
+    preconditions: { has_armor: false },
+    effects: { has_armor: true },
+    cost: 7,
+    villagerAction: 'craft_armor',
+    targetFinder: campfireTarget,
+    runtimeCheck: (v, wv) => bestCraftableArmor(wv.stockpile, v.equipment.armor) !== null,
   },
 
   // Building
