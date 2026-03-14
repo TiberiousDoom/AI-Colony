@@ -89,7 +89,7 @@ export const GOAP_GOALS: GOAPGoal[] = [
       if (state.has_weapon) return 0
       const hasMonsters = wv.monsters.some(m => m.behaviorState !== 'dead')
       if (hasMonsters && bestCraftableWeapon(wv.stockpile, villager.equipment.weapon)) return 1.2
-      if (bestCraftableWeapon(wv.stockpile, villager.equipment.weapon)) return 0.15
+      if (bestCraftableWeapon(wv.stockpile, villager.equipment.weapon)) return 0.05
       return 0
     },
   },
@@ -100,7 +100,7 @@ export const GOAP_GOALS: GOAPGoal[] = [
       if (state.has_armor) return 0
       const hasMonsters = wv.monsters.some(m => m.behaviorState !== 'dead')
       if (hasMonsters && bestCraftableArmor(wv.stockpile, villager.equipment.armor)) return 1.0
-      if (bestCraftableArmor(wv.stockpile, villager.equipment.armor)) return 0.1
+      if (bestCraftableArmor(wv.stockpile, villager.equipment.armor)) return 0.04
       return 0
     },
   },

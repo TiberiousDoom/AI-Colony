@@ -413,30 +413,52 @@ export class EvolutionaryAI implements IAISystem {
       // Crafting: boost when monsters exist and unarmed/unarmored
       if (actionType === 'craft_weapon') {
         const hasMonsters = (worldView.monsters ?? []).some(m => m.behaviorState !== 'dead')
+        const aliveCount = worldView.villagers.filter(v => v.alive).length
+        const foodPerCapita = aliveCount > 0 ? worldView.stockpile.food / aliveCount : 0
+        const othersCrafting = worldView.villagers.filter(v => v.alive && v.id !== villager.id && (v.currentAction === 'craft_weapon' || v.currentAction === 'craft_armor')).length
         if (hasMonsters && !villager.equipment.weapon) {
           score += 1.0
           parts.push('unarmed + monsters +1.0')
         } else if (!villager.equipment.weapon) {
-          score += 0.3
-          parts.push('unarmed, prepare +0.3')
+          score += 0.08
+          parts.push('unarmed, prepare +0.08')
         }
         if (hunger.current < 30 || energy.current < 30) {
           score -= 1.0
           parts.push('survival priority -1.0')
+        }
+        if (foodPerCapita < 5) {
+          score -= 0.5
+          parts.push('low food/capita -0.5')
+        }
+        if (othersCrafting >= 2) {
+          score -= 0.5
+          parts.push('others crafting -0.5')
         }
       }
       if (actionType === 'craft_armor') {
         const hasMonsters = (worldView.monsters ?? []).some(m => m.behaviorState !== 'dead')
+        const aliveCount = worldView.villagers.filter(v => v.alive).length
+        const foodPerCapita = aliveCount > 0 ? worldView.stockpile.food / aliveCount : 0
+        const othersCrafting = worldView.villagers.filter(v => v.alive && v.id !== villager.id && (v.currentAction === 'craft_weapon' || v.currentAction === 'craft_armor')).length
         if (hasMonsters && !villager.equipment.armor) {
           score += 0.8
           parts.push('unarmored + monsters +0.8')
         } else if (!villager.equipment.armor) {
-          score += 0.2
-          parts.push('unarmored, prepare +0.2')
+          score += 0.05
+          parts.push('unarmored, prepare +0.05')
         }
         if (hunger.current < 30 || energy.current < 30) {
           score -= 1.0
           parts.push('survival priority -1.0')
+        }
+        if (foodPerCapita < 5) {
+          score -= 0.5
+          parts.push('low food/capita -0.5')
+        }
+        if (othersCrafting >= 2) {
+          score -= 0.5
+          parts.push('others crafting -0.5')
         }
       }
 

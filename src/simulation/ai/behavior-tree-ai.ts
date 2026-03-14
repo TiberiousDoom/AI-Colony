@@ -368,7 +368,14 @@ function buildVillagerTree(villager: Readonly<Villager>, wv: AIWorldView): BTNod
     new Sequence([
       new Condition((ctx) => {
         const hasMonsters = ctx.worldView.monsters.some(m => m.behaviorState !== 'dead')
-        return hasMonsters && !villager.equipment.weapon && bestCraftableWeapon(ctx.worldView.stockpile, villager.equipment.weapon) !== null
+        if (!hasMonsters || villager.equipment.weapon) return false
+        if (!bestCraftableWeapon(ctx.worldView.stockpile, villager.equipment.weapon)) return false
+        const alive = ctx.worldView.villagers.filter(v => v.alive)
+        const foodPerCapita = alive.length > 0 ? ctx.worldView.stockpile.food / alive.length : 0
+        if (foodPerCapita < 5) return false
+        const othersCrafting = alive.filter(v => v.id !== villager.id && (v.currentAction === 'craft_weapon' || v.currentAction === 'craft_armor')).length
+        if (othersCrafting >= 2) return false
+        return true
       }),
       new ActionNode((ctx) => ({
         action: 'craft_weapon' as const,
@@ -379,7 +386,14 @@ function buildVillagerTree(villager: Readonly<Villager>, wv: AIWorldView): BTNod
     new Sequence([
       new Condition((ctx) => {
         const hasMonsters = ctx.worldView.monsters.some(m => m.behaviorState !== 'dead')
-        return hasMonsters && !villager.equipment.armor && bestCraftableArmor(ctx.worldView.stockpile, villager.equipment.armor) !== null
+        if (!hasMonsters || villager.equipment.armor) return false
+        if (!bestCraftableArmor(ctx.worldView.stockpile, villager.equipment.armor)) return false
+        const alive = ctx.worldView.villagers.filter(v => v.alive)
+        const foodPerCapita = alive.length > 0 ? ctx.worldView.stockpile.food / alive.length : 0
+        if (foodPerCapita < 5) return false
+        const othersCrafting = alive.filter(v => v.id !== villager.id && (v.currentAction === 'craft_weapon' || v.currentAction === 'craft_armor')).length
+        if (othersCrafting >= 2) return false
+        return true
       }),
       new ActionNode((ctx) => ({
         action: 'craft_armor' as const,
