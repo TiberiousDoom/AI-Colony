@@ -236,33 +236,55 @@ function scoreAction(
   // Craft weapon: boost when monsters exist and villager unarmed
   if (action.type === 'craft_weapon') {
     const hasMonsters = worldView.monsters.some(m => m.behaviorState !== 'dead')
+    const aliveCount = worldView.villagers.filter(v => v.alive).length
+    const foodPerCapita = aliveCount > 0 ? worldView.stockpile.food / aliveCount : 0
+    const othersCrafting = worldView.villagers.filter(v => v.alive && v.id !== villager.id && (v.currentAction === 'craft_weapon' || v.currentAction === 'craft_armor')).length
     if (hasMonsters && !villager.equipment.weapon && bestCraftableWeapon(worldView.stockpile, villager.equipment.weapon)) {
       envMod += 1.0
       reasons.push('unarmed + monsters +1.0')
     } else if (!villager.equipment.weapon && bestCraftableWeapon(worldView.stockpile, villager.equipment.weapon)) {
-      envMod += 0.3
-      reasons.push('unarmed, prepare +0.3')
+      envMod += 0.08
+      reasons.push('unarmed, prepare +0.08')
     }
-    // Suppress when survival needs critical
+    // Suppress when survival needs critical or food scarce
     if (hunger.current < 30 || energy.current < 30) {
       envMod -= 1.0
       reasons.push('survival priority -1.0')
+    }
+    if (foodPerCapita < 5) {
+      envMod -= 0.5
+      reasons.push('low food/capita -0.5')
+    }
+    if (othersCrafting >= 2) {
+      envMod -= 0.5
+      reasons.push('others crafting -0.5')
     }
   }
 
   // Craft armor: boost when monsters exist and villager unarmored
   if (action.type === 'craft_armor') {
     const hasMonsters = worldView.monsters.some(m => m.behaviorState !== 'dead')
+    const aliveCount = worldView.villagers.filter(v => v.alive).length
+    const foodPerCapita = aliveCount > 0 ? worldView.stockpile.food / aliveCount : 0
+    const othersCrafting = worldView.villagers.filter(v => v.alive && v.id !== villager.id && (v.currentAction === 'craft_weapon' || v.currentAction === 'craft_armor')).length
     if (hasMonsters && !villager.equipment.armor && bestCraftableArmor(worldView.stockpile, villager.equipment.armor)) {
       envMod += 0.8
       reasons.push('unarmored + monsters +0.8')
     } else if (!villager.equipment.armor && bestCraftableArmor(worldView.stockpile, villager.equipment.armor)) {
-      envMod += 0.2
-      reasons.push('unarmored, prepare +0.2')
+      envMod += 0.05
+      reasons.push('unarmored, prepare +0.05')
     }
     if (hunger.current < 30 || energy.current < 30) {
       envMod -= 1.0
       reasons.push('survival priority -1.0')
+    }
+    if (foodPerCapita < 5) {
+      envMod -= 0.5
+      reasons.push('low food/capita -0.5')
+    }
+    if (othersCrafting >= 2) {
+      envMod -= 0.5
+      reasons.push('others crafting -0.5')
     }
   }
 

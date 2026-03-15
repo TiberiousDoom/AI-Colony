@@ -228,7 +228,14 @@ export const GOAP_ACTIONS: GOAPAction[] = [
     cost: 6,
     villagerAction: 'craft_weapon',
     targetFinder: campfireTarget,
-    runtimeCheck: (v, wv) => bestCraftableWeapon(wv.stockpile, v.equipment.weapon) !== null,
+    runtimeCheck: (v, wv) => {
+      if (!bestCraftableWeapon(wv.stockpile, v.equipment.weapon)) return false
+      const alive = wv.villagers.filter(vl => vl.alive)
+      if (alive.length > 0 && wv.stockpile.food / alive.length < 5) return false
+      const othersCrafting = alive.filter(vl => vl.id !== v.id && (vl.currentAction === 'craft_weapon' || vl.currentAction === 'craft_armor')).length
+      if (othersCrafting >= 2) return false
+      return true
+    },
   },
   {
     name: 'CraftArmor',
@@ -237,7 +244,14 @@ export const GOAP_ACTIONS: GOAPAction[] = [
     cost: 7,
     villagerAction: 'craft_armor',
     targetFinder: campfireTarget,
-    runtimeCheck: (v, wv) => bestCraftableArmor(wv.stockpile, v.equipment.armor) !== null,
+    runtimeCheck: (v, wv) => {
+      if (!bestCraftableArmor(wv.stockpile, v.equipment.armor)) return false
+      const alive = wv.villagers.filter(vl => vl.alive)
+      if (alive.length > 0 && wv.stockpile.food / alive.length < 5) return false
+      const othersCrafting = alive.filter(vl => vl.id !== v.id && (vl.currentAction === 'craft_weapon' || vl.currentAction === 'craft_armor')).length
+      if (othersCrafting >= 2) return false
+      return true
+    },
   },
 
   // Building
