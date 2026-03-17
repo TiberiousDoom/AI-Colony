@@ -4,12 +4,13 @@
 
 import { useSimulationStore } from '../store/simulation-store.ts'
 
-type ViewMode = 'metrics' | 'simulation' | 'results'
+type ViewMode = 'metrics' | 'simulation' | 'results' | 'voxel'
 
 const MODES: { key: ViewMode; label: string }[] = [
   { key: 'metrics', label: 'Metrics' },
   { key: 'simulation', label: 'Sim' },
   { key: 'results', label: 'Results' },
+  { key: 'voxel', label: 'Voxel' },
 ]
 
 export function ViewToggle() {

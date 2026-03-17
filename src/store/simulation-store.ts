@@ -27,7 +27,7 @@ interface SimulationStore {
   /** World seed */
   seed: number
   /** Current view mode */
-  viewMode: 'metrics' | 'simulation' | 'results'
+  viewMode: 'metrics' | 'simulation' | 'results' | 'voxel'
   /** Game configuration */
   gameConfig: GameConfig
   /** Whether to show the setup screen */
@@ -40,7 +40,7 @@ interface SimulationStore {
   reset: () => void
   setSpeed: (speed: number) => void
   setSeed: (seed: number) => void
-  setViewMode: (mode: 'metrics' | 'simulation' | 'results') => void
+  setViewMode: (mode: 'metrics' | 'simulation' | 'results' | 'voxel') => void
   setGameConfig: (config: GameConfig) => void
   startWithConfig: (config: GameConfig) => void
   showSetupScreen: () => void
@@ -181,7 +181,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
       set({ seed })
     },
 
-    setViewMode(mode: 'metrics' | 'simulation' | 'results') {
+    setViewMode(mode: 'metrics' | 'simulation' | 'results' | 'voxel') {
       set({ viewMode: mode })
     },
 

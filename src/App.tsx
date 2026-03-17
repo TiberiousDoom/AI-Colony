@@ -36,6 +36,7 @@ function lazyRetry<T extends Record<string, unknown>>(
 const SimulationView = lazyRetry(() => import('./views/SimulationView.tsx'), m => ({ default: m.SimulationView }))
 const ResultsSummary = lazyRetry(() => import('./views/ResultsSummary.tsx'), m => ({ default: m.ResultsSummary }))
 const SetupScreen = lazyRetry(() => import('./views/SetupScreen.tsx'), m => ({ default: m.SetupScreen }))
+const VoxelSandbox = lazyRetry(() => import('./voxel/views/VoxelSandbox.tsx'), m => ({ default: m.VoxelSandbox }))
 
 function App() {
   const [showChecklist, setShowChecklist] = useState(false)
@@ -100,7 +101,15 @@ function App() {
       />
       <ErrorBoundary>
         <main className="app-main">
-          {viewMode === 'metrics' ? (
+          {viewMode === 'voxel' ? (
+            <Suspense fallback={
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8' }}>
+                Loading voxel sandbox...
+              </div>
+            }>
+              <VoxelSandbox />
+            </Suspense>
+          ) : viewMode === 'metrics' ? (
             <MetricsDashboard />
           ) : viewMode === 'results' ? (
             <Suspense fallback={
