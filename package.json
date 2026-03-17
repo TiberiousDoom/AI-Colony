@@ -9,13 +9,21 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:phase1": "vitest run tests/phase-gates/phase1.test.ts",
+    "test:phase2": "vitest run tests/phase-gates/phase2.test.ts",
+    "test:phase3": "vitest run tests/phase-gates/phase3.test.ts",
+    "test:phase4": "vitest run tests/phase-gates/phase4.test.ts",
+    "test:phase5": "vitest run tests/phase-gates/phase5.test.ts",
+    "test:gates": "vitest run tests/phase-gates/"
   },
   "dependencies": {
+    "@types/three": "^0.183.1",
     "pixi.js": "^8.16.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "recharts": "^2.15.0",
+    "three": "^0.183.2",
     "zustand": "^5.0.0"
   },
   "devDependencies": {
