@@ -20,13 +20,16 @@ import { worldToChunk, CHUNK_SIZE, chunkKey } from '../world/chunk-utils.ts'
 const MAX_ITERATIONS = 50_000
 const MAX_PATH_TRACE = 500
 
-function chunkScopeKeys(center: VoxelCoord): Set<string> {
-  const cc = worldToChunk(center)
+function chunkScopeKeys(start: VoxelCoord, goal: VoxelCoord): Set<string> {
   const keys = new Set<string>()
-  for (let dx = -1; dx <= 1; dx++) {
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dz = -1; dz <= 1; dz++) {
-        keys.add(chunkKey({ cx: cc.cx + dx, cy: cc.cy + dy, cz: cc.cz + dz }))
+  // Union of 3×3×3 neighborhoods around both start and goal
+  for (const center of [start, goal]) {
+    const cc = worldToChunk(center)
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          keys.add(chunkKey({ cx: cc.cx + dx, cy: cc.cy + dy, cz: cc.cz + dz }))
+        }
       }
     }
   }
@@ -386,7 +389,7 @@ export class DStarLitePathfinder implements IPathfinder {
       return null
     }
 
-    const scopeChunks = this.fullGridMode ? null : chunkScopeKeys(start)
+    const scopeChunks = this.fullGridMode ? null : chunkScopeKeys(start, destination)
     const handle = new DStarLiteHandle(start, destination, agentId, this.worldView, agentHeight, scopeChunks)
     const reachable = handle.initialize()
 
