@@ -4,27 +4,30 @@
 
 import { useSimulationStore } from '../store/simulation-store.ts'
 
-type ViewMode = 'metrics' | 'simulation' | 'results' | 'voxel'
+type ViewMode = 'metrics' | 'simulation' | 'results' | 'voxel' | 'compare'
 
 const MODES: { key: ViewMode; label: string }[] = [
   { key: 'metrics', label: 'Metrics' },
   { key: 'simulation', label: 'Sim' },
   { key: 'results', label: 'Results' },
   { key: 'voxel', label: 'Voxel' },
+  { key: 'compare', label: 'Compare' },
 ]
 
 export function ViewToggle() {
   const viewMode = useSimulationStore(s => s.viewMode)
   const setViewMode = useSimulationStore(s => s.setViewMode)
   const competitionState = useSimulationStore(s => s.competitionState)
+  const voxelOnly = useSimulationStore(s => s.voxelOnly)
 
   const hasHistory = competitionState?.villages.some(v => v.history.daily.length > 0) ?? false
+  const modes = voxelOnly ? MODES.filter(m => m.key === 'voxel' || m.key === 'compare') : MODES
 
   return (
     <div data-testid="view-toggle" style={{ display: 'flex', gap: 2 }}>
-      {MODES.map((mode, i) => {
+      {modes.map((mode, i) => {
         const isFirst = i === 0
-        const isLast = i === MODES.length - 1
+        const isLast = i === modes.length - 1
         const isActive = viewMode === mode.key
         const isDisabled = mode.key === 'results' && !hasHistory
 
