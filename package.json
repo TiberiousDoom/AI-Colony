@@ -15,6 +15,7 @@
     "test:phase3": "vitest run tests/phase-gates/phase3.test.ts",
     "test:phase4": "vitest run tests/phase-gates/phase4.test.ts",
     "test:phase5": "vitest run tests/phase-gates/phase5.test.ts",
+    "test:colony-phase5": "vitest run tests/phase-gates/colony-phase5.test.ts",
     "test:gates": "vitest run tests/phase-gates/"
   },
   "dependencies": {

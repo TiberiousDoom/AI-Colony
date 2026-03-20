@@ -12,6 +12,7 @@ import { GridAStarPathfinder } from '../src/voxel/pathfinding/grid-astar.ts'
 import { HPAStarPathfinder } from '../src/voxel/pathfinding/hpa-star.ts'
 import { FlowFieldPathfinder } from '../src/voxel/pathfinding/flow-field-pathfinder.ts'
 import { DStarLitePathfinder } from '../src/voxel/pathfinding/dstar-lite.ts'
+import { HybridPathfinder } from '../src/voxel/pathfinding/hybrid-pathfinder.ts'
 import type { PathfinderFactory } from '../src/voxel/simulation/scenario-runner.ts'
 import { createCanyonRunScenario } from '../src/voxel/simulation/scenarios/canyon-run.ts'
 import { createBridgeCollapseScenario } from '../src/voxel/simulation/scenarios/bridge-collapse.ts'
@@ -23,10 +24,11 @@ const FACTORIES = new Map<string, PathfinderFactory>([
   ['HPA*', (wv, ws) => new HPAStarPathfinder(wv, ws)],
   ['FlowField', (wv, ws) => new FlowFieldPathfinder(wv, ws)],
   ['D* Lite', (wv, ws) => new DStarLitePathfinder(wv, ws)],
+  ['Hybrid', (wv, ws) => new HybridPathfinder(wv, ws)],
 ])
 
 describe('Headless Benchmark', () => {
-  it('Canyon Run — 4 algorithms × 10 seeds', { timeout: 120000 }, () => {
+  it('Canyon Run — 5 algorithms × 10 seeds', { timeout: 180000 }, () => {
     const output = runBenchmark({
       scenario: createCanyonRunScenario(),
       pathfinderFactories: FACTORIES,
@@ -42,7 +44,7 @@ describe('Headless Benchmark', () => {
     }
   })
 
-  it('Bridge Collapse — 4 algorithms × 10 seeds', { timeout: 120000 }, () => {
+  it('Bridge Collapse — 5 algorithms × 10 seeds', { timeout: 180000 }, () => {
     const output = runBenchmark({
       scenario: createBridgeCollapseScenario(),
       pathfinderFactories: FACTORIES,

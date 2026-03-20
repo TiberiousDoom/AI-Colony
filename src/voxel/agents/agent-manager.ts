@@ -9,7 +9,7 @@ import type { ReservationTable } from '../pathfinding/reservation-table.ts'
 import type { EventLogger } from '../simulation/event-logger.ts'
 import { DensityCongestionManager } from '../pathfinding/density-congestion.ts'
 
-export type CongestionStrategy = 'reservation' | 'density'
+export type CongestionStrategy = 'reservation' | 'density' | 'hybrid'
 
 export class AgentManager {
   private agents: Agent[] = []
@@ -42,6 +42,17 @@ export class AgentManager {
   }
 
   get strategy(): CongestionStrategy { return this.congestionStrategy }
+
+  /** Determine if an agent should use density congestion strategy */
+  private usesDensityForAgent(agent: Agent): boolean {
+    if (this.congestionStrategy === 'density') return true
+    if (this.congestionStrategy === 'reservation') return false
+    // Hybrid: check if agent's handle is on a flow field segment
+    if (agent.navigationHandle && 'getActiveSubType' in agent.navigationHandle) {
+      return (agent.navigationHandle as any).getActiveSubType() === 'flowfield'
+    }
+    return false
+  }
 
   set reservationLookahead(ticks: number) {
     this._reservationLookahead = Math.max(1, Math.min(10, ticks))
@@ -289,7 +300,7 @@ export class AgentManager {
           this.cancelReservations(agent)
           this.assignDestination(agent, agent.destination)
         } else if (agent.waitTicks >= 5 && agent.destination) {
-          if (this.congestionStrategy === 'density') {
+          if (this.usesDensityForAgent(agent)) {
             // Density: attempt sidestep
             this.processDensitySidestep(agent)
           } else {
@@ -343,7 +354,7 @@ export class AgentManager {
     }
 
     // Check for congestion based on strategy
-    if (this.congestionStrategy === 'density') {
+    if (this.usesDensityForAgent(agent)) {
       // Density-based: check if next voxel is occupied
       const agentPositions = this.agents.map(a => ({ id: a.id, position: a.position }))
       const blockerId = this.densityManager.isOccupied(next, agent.id, agentPositions)

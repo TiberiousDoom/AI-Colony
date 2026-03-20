@@ -20,11 +20,12 @@ const stateColors: Record<string, string> = {
   'Stuck': '#ef4444',
 }
 
-const ALGO_PANELS: { key: 'astar' | 'hpastar' | 'flowfield' | 'dstar'; label: string; color: string }[] = [
+const ALGO_PANELS: { key: 'astar' | 'hpastar' | 'flowfield' | 'dstar' | 'hybrid'; label: string; color: string }[] = [
   { key: 'astar', label: 'A* Pathfinder', color: '#60a5fa' },
   { key: 'hpastar', label: 'HPA* Pathfinder', color: '#f59e0b' },
   { key: 'flowfield', label: 'FlowField Pathfinder', color: '#34d399' },
   { key: 'dstar', label: 'D* Lite Pathfinder', color: '#a78bfa' },
+  { key: 'hybrid', label: 'Hybrid Pathfinder', color: '#f472b6' },
 ]
 
 function AlgoPanel({ label, color, metrics, agents }: {
@@ -71,6 +72,7 @@ export function ComparisonView() {
   const hpastarAgents = useComparisonStore(s => s.hpastarAgents)
   const flowfieldAgents = useComparisonStore(s => s.flowfieldAgents)
   const dstarAgents = useComparisonStore(s => s.dstarAgents)
+  const hybridAgents = useComparisonStore(s => s.hybridAgents)
   const metrics = useComparisonStore(s => s.metrics)
   const seed = useComparisonStore(s => s.seed)
   const selectedScenario = useComparisonStore(s => s.selectedScenario)
@@ -94,6 +96,7 @@ export function ComparisonView() {
     hpastar: hpastarAgents,
     flowfield: flowfieldAgents,
     dstar: dstarAgents,
+    hybrid: hybridAgents,
   }
 
   return (

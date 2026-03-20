@@ -28,6 +28,7 @@ export interface ComparisonDiagnosticInput {
   hpastar: AlgorithmData
   flowfield?: AlgorithmData
   dstar?: AlgorithmData
+  hybrid?: AlgorithmData
 }
 
 function fmtCoord(c: Record<string, unknown>): string {
@@ -178,9 +179,10 @@ function formatTimeline(label: string, events: ReadonlyArray<LogEntry>, limit: n
 
 export function generateComparisonReport(input: ComparisonDiagnosticInput): string {
   const lines: string[] = []
-  const { astar, hpastar, flowfield, dstar } = input
+  const { astar, hpastar, flowfield, dstar, hybrid } = input
   const hasFlowField = !!flowfield
   const hasDStar = !!dstar
+  const hasHybrid = !!hybrid
 
   // Build algorithm list
   const algoNames = ['A*', 'HPA*']
@@ -192,6 +194,10 @@ export function generateComparisonReport(input: ComparisonDiagnosticInput): stri
   if (hasDStar) {
     algoNames.push('D* Lite')
     algoData.push(dstar)
+  }
+  if (hasHybrid) {
+    algoNames.push('Hybrid')
+    algoData.push(hybrid)
   }
 
   lines.push('# Comparison Diagnostic Report')
@@ -262,8 +268,8 @@ export function generateComparisonReport(input: ComparisonDiagnosticInput): stri
     lines.push('')
   }
 
-  // 6. Event Timeline (last 25 each to keep report manageable with 4 algos)
-  const timelineLimit = hasDStar ? 25 : (hasFlowField ? 30 : 50)
+  // 6. Event Timeline (last 20 each to keep report manageable with 5 algos)
+  const timelineLimit = hasHybrid ? 20 : (hasDStar ? 25 : (hasFlowField ? 30 : 50))
   lines.push('## 6. Event Timeline')
   for (let i = 0; i < algoNames.length; i++) {
     lines.push(formatTimeline(algoNames[i], algoData[i].events, timelineLimit))

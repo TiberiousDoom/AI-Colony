@@ -27,6 +27,7 @@ interface ComparisonStore {
   hpastarAgents: ReadonlyArray<Agent>
   flowfieldAgents: ReadonlyArray<Agent>
   dstarAgents: ReadonlyArray<Agent>
+  hybridAgents: ReadonlyArray<Agent>
   metrics: ComparisonMetrics | null
   selectedScenario: ScenarioName
   report: string | null
@@ -62,6 +63,7 @@ export const useComparisonStore = create<ComparisonStore>((set, get) => {
       hpastarAgents: state.hpastarAgents,
       flowfieldAgents: state.flowfieldAgents,
       dstarAgents: state.dstarAgents,
+      hybridAgents: state.hybridAgents,
       metrics: state.metrics,
     })
   }
@@ -75,6 +77,7 @@ export const useComparisonStore = create<ComparisonStore>((set, get) => {
     hpastarAgents: [],
     flowfieldAgents: [],
     dstarAgents: [],
+    hybridAgents: [],
     metrics: null,
     selectedScenario: 'none',
     report: null,
@@ -92,12 +95,14 @@ export const useComparisonStore = create<ComparisonStore>((set, get) => {
           runner.hpastarEngine.grid.setBlock({ x, y: 0, z }, BlockType.Solid)
           runner.flowfieldEngine.grid.setBlock({ x, y: 0, z }, BlockType.Solid)
           runner.dstarEngine.grid.setBlock({ x, y: 0, z }, BlockType.Solid)
+          runner.hybridEngine.grid.setBlock({ x, y: 0, z }, BlockType.Solid)
         }
       }
 
       // Rebuild pathfinder graphs now that terrain exists
       runner.rebuildHPAGraph()
       runner.rebuildFlowFieldLayers()
+      runner.rebuildHybridGraphs()
 
       // Add a default agent on each side
       const pos = { x: 4, y: 1, z: 4 }
@@ -112,6 +117,9 @@ export const useComparisonStore = create<ComparisonStore>((set, get) => {
       resetAgentIdCounter()
       const a4 = createAgent(pos)
       runner.dstarEngine.agentManager.addAgent(a4)
+      resetAgentIdCounter()
+      const a5 = createAgent(pos)
+      runner.hybridEngine.agentManager.addAgent(a5)
 
       // Auto-assign destinations so agents pathfind continuously
       runner.autoAssign = true
@@ -125,6 +133,7 @@ export const useComparisonStore = create<ComparisonStore>((set, get) => {
         hpastarAgents: [...runner.hpastarEngine.agentManager.getAgents()],
         flowfieldAgents: [...runner.flowfieldEngine.agentManager.getAgents()],
         dstarAgents: [...runner.dstarEngine.agentManager.getAgents()],
+        hybridAgents: [...runner.hybridEngine.agentManager.getAgents()],
         metrics: runner.getMetrics(),
         report: null,
       })
@@ -233,6 +242,11 @@ export const useComparisonStore = create<ComparisonStore>((set, get) => {
           metrics: runner.dstarEngine.metrics,
           events: runner.getDStarEvents(),
           agents: [...runner.dstarEngine.agentManager.getAgents()],
+        },
+        hybrid: {
+          metrics: runner.hybridEngine.metrics,
+          events: runner.getHybridEvents(),
+          agents: [...runner.hybridEngine.agentManager.getAgents()],
         },
       })
 

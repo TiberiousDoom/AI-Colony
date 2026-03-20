@@ -4,6 +4,7 @@ import { GridAStarPathfinder } from '../pathfinding/grid-astar.ts'
 import { HPAStarPathfinder } from '../pathfinding/hpa-star.ts'
 import { FlowFieldPathfinder } from '../pathfinding/flow-field-pathfinder.ts'
 import { DStarLitePathfinder } from '../pathfinding/dstar-lite.ts'
+import { HybridPathfinder } from '../pathfinding/hybrid-pathfinder.ts'
 import { PassthroughSmoother } from '../pathfinding/pathfinder-interface.ts'
 import type { IPathSmoother } from '../pathfinding/pathfinder-interface.ts'
 import { AgentManager } from '../agents/agent-manager.ts'
@@ -21,6 +22,7 @@ export interface ComparisonMetrics {
   hpastar: SimulationMetrics
   flowfield: SimulationMetrics
   dstar: SimulationMetrics
+  hybrid: SimulationMetrics
 }
 
 export interface ComparisonState {
@@ -29,6 +31,7 @@ export interface ComparisonState {
   hpastarAgents: ReadonlyArray<Agent>
   flowfieldAgents: ReadonlyArray<Agent>
   dstarAgents: ReadonlyArray<Agent>
+  hybridAgents: ReadonlyArray<Agent>
   metrics: ComparisonMetrics
 }
 
@@ -37,10 +40,12 @@ export class ComparisonRunner {
   readonly hpastarEngine: SimulationEngine
   readonly flowfieldEngine: SimulationEngine
   readonly dstarEngine: SimulationEngine
+  readonly hybridEngine: SimulationEngine
   private astarLogger: EventLogger
   private hpastarLogger: EventLogger
   private flowfieldLogger: EventLogger
   private dstarLogger: EventLogger
+  private hybridLogger: EventLogger
   private pendingChanges: Array<{ pos: VoxelCoord; type: BlockType }> = []
   private destRng: ReturnType<typeof createRNG>
   autoAssign: boolean = false
@@ -92,6 +97,17 @@ export class ComparisonRunner {
     this.dstarLogger = new EventLogger()
     this.dstarEngine.setEventLogger(this.dstarLogger)
 
+    // Hybrid side — reset IDs again, use hybrid congestion
+    resetAgentIdCounter()
+    const rng5 = createRNG(seed)
+    const grid5 = new VoxelGrid(worldSize)
+    const wv5 = new GridWorldView(grid5)
+    const pf5 = new HybridPathfinder(wv5, worldSize)
+    const am5 = new AgentManager(pf5, sm, grid5, undefined, 'hybrid')
+    this.hybridEngine = new SimulationEngine(grid5, pf5, am5, rng5)
+    this.hybridLogger = new EventLogger()
+    this.hybridEngine.setEventLogger(this.hybridLogger)
+
     this.destRng = createRNG(seed + 999)
   }
 
@@ -107,17 +123,25 @@ export class ComparisonRunner {
     pf.rebuildLayers()
   }
 
+  /** Rebuild hybrid pathfinder graphs (call after bulk terrain setup) */
+  rebuildHybridGraphs(): void {
+    const pf = this.hybridEngine.pathfinder as HybridPathfinder
+    pf.rebuildGraph()
+    pf.rebuildLayers()
+  }
+
   queueTerrainChange(pos: VoxelCoord, type: BlockType): void {
     this.pendingChanges.push({ pos, type })
   }
 
   processTick(): void {
-    // Apply mirrored terrain changes to all 4 engines
+    // Apply mirrored terrain changes to all 5 engines
     for (const { pos, type } of this.pendingChanges) {
       this.astarEngine.queueTerrainChange(pos, type)
       this.hpastarEngine.queueTerrainChange(pos, type)
       this.flowfieldEngine.queueTerrainChange(pos, type)
       this.dstarEngine.queueTerrainChange(pos, type)
+      this.hybridEngine.queueTerrainChange(pos, type)
     }
     this.pendingChanges = []
 
@@ -125,6 +149,7 @@ export class ComparisonRunner {
     this.hpastarEngine.processTick()
     this.flowfieldEngine.processTick()
     this.dstarEngine.processTick()
+    this.hybridEngine.processTick()
 
     if (this.autoAssign) {
       this.assignIdleAgents()
@@ -137,31 +162,26 @@ export class ComparisonRunner {
     const hpaAgents = this.hpastarEngine.agentManager.getAgents()
     const ffAgents = this.flowfieldEngine.agentManager.getAgents()
     const dsAgents = this.dstarEngine.agentManager.getAgents()
+    const hyAgents = this.hybridEngine.agentManager.getAgents()
 
     for (let i = 0; i < astarAgents.length; i++) {
       const a = astarAgents[i]
       const h = hpaAgents[i]
       const f = ffAgents[i]
       const d = dsAgents[i]
-      if (!a || !h || !f || !d) continue
-      if (a.state !== 'Idle' && h.state !== 'Idle' && f.state !== 'Idle' && d.state !== 'Idle') continue
+      const y = hyAgents[i]
+      if (!a || !h || !f || !d || !y) continue
+      if (a.state !== 'Idle' && h.state !== 'Idle' && f.state !== 'Idle' && d.state !== 'Idle' && y.state !== 'Idle') continue
 
       // Pick one destination for all sides
       const dest = this.astarEngine.findRandomWalkablePosition(this.destRng)
       if (!dest) continue
 
-      if (a.state === 'Idle') {
-        this.astarEngine.agentManager.assignDestination(a, dest)
-      }
-      if (h.state === 'Idle') {
-        this.hpastarEngine.agentManager.assignDestination(h, dest)
-      }
-      if (f.state === 'Idle') {
-        this.flowfieldEngine.agentManager.assignDestination(f, dest)
-      }
-      if (d.state === 'Idle') {
-        this.dstarEngine.agentManager.assignDestination(d, dest)
-      }
+      if (a.state === 'Idle') this.astarEngine.agentManager.assignDestination(a, dest)
+      if (h.state === 'Idle') this.hpastarEngine.agentManager.assignDestination(h, dest)
+      if (f.state === 'Idle') this.flowfieldEngine.agentManager.assignDestination(f, dest)
+      if (d.state === 'Idle') this.dstarEngine.agentManager.assignDestination(d, dest)
+      if (y.state === 'Idle') this.hybridEngine.agentManager.assignDestination(y, dest)
     }
   }
 
@@ -171,6 +191,7 @@ export class ComparisonRunner {
       hpastar: this.hpastarEngine.metrics,
       flowfield: this.flowfieldEngine.metrics,
       dstar: this.dstarEngine.metrics,
+      hybrid: this.hybridEngine.metrics,
     }
   }
 
@@ -181,23 +202,14 @@ export class ComparisonRunner {
       hpastarAgents: [...this.hpastarEngine.agentManager.getAgents()],
       flowfieldAgents: [...this.flowfieldEngine.agentManager.getAgents()],
       dstarAgents: [...this.dstarEngine.agentManager.getAgents()],
+      hybridAgents: [...this.hybridEngine.agentManager.getAgents()],
       metrics: this.getMetrics(),
     }
   }
 
-  getAStarEvents(): ReadonlyArray<LogEntry> {
-    return this.astarLogger.getEntries()
-  }
-
-  getHPAStarEvents(): ReadonlyArray<LogEntry> {
-    return this.hpastarLogger.getEntries()
-  }
-
-  getFlowFieldEvents(): ReadonlyArray<LogEntry> {
-    return this.flowfieldLogger.getEntries()
-  }
-
-  getDStarEvents(): ReadonlyArray<LogEntry> {
-    return this.dstarLogger.getEntries()
-  }
+  getAStarEvents(): ReadonlyArray<LogEntry> { return this.astarLogger.getEntries() }
+  getHPAStarEvents(): ReadonlyArray<LogEntry> { return this.hpastarLogger.getEntries() }
+  getFlowFieldEvents(): ReadonlyArray<LogEntry> { return this.flowfieldLogger.getEntries() }
+  getDStarEvents(): ReadonlyArray<LogEntry> { return this.dstarLogger.getEntries() }
+  getHybridEvents(): ReadonlyArray<LogEntry> { return this.hybridLogger.getEntries() }
 }
