@@ -8,7 +8,7 @@
  */
 
 import type { VoxelCoord } from './types.ts'
-import { voxelKey, voxelEquals } from './types.ts'
+import { voxelKey } from './types.ts'
 import type { NavigationHandle } from './pathfinder-interface.ts'
 
 export type SubHandleType = 'dstar' | 'hpastar-dstar' | 'flowfield'

@@ -14,17 +14,13 @@ import { SimulationEngine } from '../../src/voxel/simulation/simulation-engine.t
 import {
   buildLayerSystem,
   getLayerAt,
-  getLayer,
-  getConnectionsFrom,
   updateLayerColumns,
 } from '../../src/voxel/pathfinding/flow-field-layers.ts'
 
 import {
   computeFlowField,
-  getFlowDirection,
   getCost,
   tracePath,
-  isTransitionPoint,
 } from '../../src/voxel/pathfinding/flow-field-dijkstra.ts'
 
 import { FlowFieldCache } from '../../src/voxel/pathfinding/flow-field-cache.ts'
@@ -167,7 +163,6 @@ describe('Flow Field Layers', () => {
     grid.setBlock({ x: 7, y: 1, z: 4 }, BlockType.Stair)
 
     const system = buildLayerSystem(grid, 2)
-    const stairConns = system.connections.filter(c => c.connectionType === 'stair')
     // May or may not produce stair connections depending on layer merging behavior
     // The slope merge might combine both into one layer
     // Either way, no errors should occur

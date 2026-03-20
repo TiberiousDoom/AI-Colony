@@ -1,15 +1,15 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { VoxelGrid } from '../../src/voxel/world/voxel-grid.ts'
 import { BlockType } from '../../src/voxel/world/block-types.ts'
 import { worldToChunk } from '../../src/voxel/world/chunk-utils.ts'
 import { GridWorldView } from '../../src/voxel/pathfinding/grid-world-view.ts'
-import { isWalkable, getNeighbors, DEFAULT_AGENT_HEIGHT } from '../../src/voxel/pathfinding/movement-rules.ts'
+import { isWalkable, getNeighbors } from '../../src/voxel/pathfinding/movement-rules.ts'
 import { GridAStarPathfinder } from '../../src/voxel/pathfinding/grid-astar.ts'
 import { PassthroughSmoother } from '../../src/voxel/pathfinding/pathfinder-interface.ts'
 import type { TerrainChangeEvent } from '../../src/voxel/pathfinding/pathfinder-interface.ts'
 import { voxelEquals, voxelKey } from '../../src/voxel/pathfinding/types.ts'
 import type { VoxelCoord } from '../../src/voxel/pathfinding/types.ts'
-import { hasGroundBelow } from '../../src/voxel/world/gravity.ts'
+
 import { createAgent, resetAgentIdCounter } from '../../src/voxel/agents/agent.ts'
 import { AgentManager } from '../../src/voxel/agents/agent-manager.ts'
 import { PathfindingBudgetManager } from '../../src/voxel/pathfinding/budget-manager.ts'
@@ -96,9 +96,7 @@ describe('World & Data Structures', () => {
     // All neighbors should differ by exactly 1 in one axis only (no diagonals)
     for (const n of neighbors) {
       const dx = Math.abs(n.coord.x - 5)
-      const dy = Math.abs(n.coord.y - 1)
       const dz = Math.abs(n.coord.z - 5)
-      const totalDist = dx + dy + dz
       // Should be reachable via a single axis change (cardinal, step-up, step-down, ladder, stair)
       // No diagonal: dx+dz should not both be non-zero
       expect(dx + dz).toBeLessThanOrEqual(1)
@@ -363,7 +361,7 @@ describe('Grid A*', () => {
     const view = new GridWorldView(grid)
     const pathfinder = new GridAStarPathfinder(view)
     // Path from ground to upper floor
-    const handle = pathfinder.requestNavigation({ x: 3, y: 1, z: 5 }, { x: 7, y: 5, z: 5 }, 2, 1)
+    pathfinder.requestNavigation({ x: 3, y: 1, z: 5 }, { x: 7, y: 5, z: 5 }, 2, 1)
     // May or may not find a path depending on exact geometry, but shouldn't crash
     // Just verify it returns without error
     expect(true).toBe(true)
@@ -446,7 +444,7 @@ describe('IPathfinder Interface', () => {
     const start: VoxelCoord = { x: 0, y: 1, z: 0 }
     const dest: VoxelCoord = { x: 3, y: 1, z: 0 }
     const handle = pathfinder.requestNavigation(start, dest, 2, 1)!
-    const path = handle.getPlannedPath(start)!
+    handle.getPlannedPath(start)
 
     // Walk the handle
     let current = start
@@ -599,7 +597,6 @@ describe('Error Recovery', () => {
   it('error-recovery: watchdog concept works via budget manager', () => {
     // The budget manager catches errors from execute() calls
     const manager = new PathfindingBudgetManager()
-    let errorCaught = false
     manager.enqueue({
       type: 'reroute',
       execute: () => { throw new Error('test error') },

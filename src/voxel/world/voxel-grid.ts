@@ -1,16 +1,13 @@
 import { BlockType } from './block-types.ts'
 import { Chunk } from './chunk.ts'
-import { CHUNK_SIZE, worldToChunk, worldToLocal, chunkKey } from './chunk-utils.ts'
+import { worldToChunk, worldToLocal, chunkKey } from './chunk-utils.ts'
 import type { VoxelCoord, ChunkCoord } from '../pathfinding/types.ts'
 
 export class VoxelGrid {
   readonly worldSize: number
   private chunks: Map<string, Chunk> = new Map()
-  private chunksPerAxis: number
-
   constructor(worldSize: number = 32) {
     this.worldSize = worldSize
-    this.chunksPerAxis = Math.ceil(worldSize / CHUNK_SIZE)
   }
 
   isInBounds(pos: VoxelCoord): boolean {

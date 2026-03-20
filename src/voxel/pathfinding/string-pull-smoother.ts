@@ -1,5 +1,4 @@
 import type { VoxelCoord, SmoothedWaypoint, MoveType } from './types.ts'
-import { voxelEquals } from './types.ts'
 import type { VoxelWorldView } from './voxel-world-view.ts'
 import type { IPathSmoother } from './pathfinder-interface.ts'
 

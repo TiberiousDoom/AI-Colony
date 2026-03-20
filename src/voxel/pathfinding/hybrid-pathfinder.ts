@@ -21,7 +21,7 @@ import { HPAStarPathfinder } from './hpa-star.ts'
 import { DStarLitePathfinder } from './dstar-lite.ts'
 import { FlowFieldPathfinder } from './flow-field-pathfinder.ts'
 import { GridAStarPathfinder } from './grid-astar.ts'
-import { HybridHandle, type SubHandleType } from './hybrid-handle.ts'
+import { HybridHandle } from './hybrid-handle.ts'
 import { IntentWorldView } from './intent-world-view.ts'
 import { IntentRegistry } from './intent-registry.ts'
 
@@ -102,7 +102,7 @@ export class HybridPathfinder implements IPathfinder {
     destination: VoxelCoord,
     agentHeight: number,
     agentId: number,
-    maxComputeMs?: number,
+    _maxComputeMs?: number,
   ): NavigationHandle | null {
     // Release existing handle
     const existing = this.activeHandles.get(agentId)

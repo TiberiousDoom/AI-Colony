@@ -37,7 +37,6 @@ export class VoxelRenderer {
   private destMaterial: THREE.MeshLambertMaterial
 
   private raycaster = new THREE.Raycaster()
-  private worldSize: number = 32
 
   // Camera orbit state
   private orbitRadius = 40
@@ -184,8 +183,6 @@ export class VoxelRenderer {
       this.scene.remove(mesh)
     }
     this.blockMeshes.clear()
-
-    this.worldSize = grid.worldSize
 
     // Only add visible blocks (those with at least one air neighbor)
     for (let x = 0; x < grid.worldSize; x++) {

@@ -9,7 +9,7 @@
 import { PriorityQueue } from './priority-queue.ts'
 import { voxelKey } from './types.ts'
 import type { VoxelCoord } from './types.ts'
-import type { LayerSystem, Layer, VerticalConnection } from './flow-field-layers.ts'
+import type { LayerSystem } from './flow-field-layers.ts'
 import { getLayer, getConnectionsFrom } from './flow-field-layers.ts'
 
 // ─── Types ──────────────────────────────────────────────────────────

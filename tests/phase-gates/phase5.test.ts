@@ -12,16 +12,12 @@ import { BlockType } from '../../src/voxel/world/block-types.ts'
 import { GridWorldView } from '../../src/voxel/pathfinding/grid-world-view.ts'
 import { GridAStarPathfinder } from '../../src/voxel/pathfinding/grid-astar.ts'
 import { HybridPathfinder } from '../../src/voxel/pathfinding/hybrid-pathfinder.ts'
-import { HybridHandle } from '../../src/voxel/pathfinding/hybrid-handle.ts'
 import { IntentRegistry } from '../../src/voxel/pathfinding/intent-registry.ts'
 import { IntentWorldView } from '../../src/voxel/pathfinding/intent-world-view.ts'
-import { voxelEquals } from '../../src/voxel/pathfinding/types.ts'
 import type { VoxelCoord } from '../../src/voxel/pathfinding/types.ts'
 import { createAgent, resetAgentIdCounter } from '../../src/voxel/agents/agent.ts'
 import { AgentManager } from '../../src/voxel/agents/agent-manager.ts'
 import { PassthroughSmoother } from '../../src/voxel/pathfinding/pathfinder-interface.ts'
-import { SimulationEngine } from '../../src/voxel/simulation/simulation-engine.ts'
-import { createRNG } from '../../src/utils/seed.ts'
 import { ComparisonRunner } from '../../src/voxel/simulation/comparison-runner.ts'
 import { runBenchmark, benchmarkToCSV } from '../../src/voxel/simulation/benchmark-runner.ts'
 import { createCanyonRunScenario } from '../../src/voxel/simulation/scenarios/canyon-run.ts'
@@ -95,9 +91,6 @@ describe('Hybrid Routing', () => {
     expect(h2).not.toBeNull()
     expect(h3).not.toBeNull()
 
-    // At least one should be promoted to flow field
-    const types = [h1!, h2!, h3!].map(h => h.getDebugInfo().subAlgorithm)
-    const hasFlowField = types.some(t => t === 'flowfield')
     // Promotion may or may not happen depending on flow field availability
     // Either way, all handles should be valid
     expect(h1!.isValid()).toBe(true)

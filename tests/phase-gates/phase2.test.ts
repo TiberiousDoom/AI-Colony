@@ -3,12 +3,12 @@ import { VoxelGrid } from '../../src/voxel/world/voxel-grid.ts'
 import { BlockType } from '../../src/voxel/world/block-types.ts'
 import { GridWorldView } from '../../src/voxel/pathfinding/grid-world-view.ts'
 import { GridAStarPathfinder } from '../../src/voxel/pathfinding/grid-astar.ts'
-import { HPAStarPathfinder, scanBoundaryNodes, CoarseGraph, findIntraChunkPath } from '../../src/voxel/pathfinding/hpa-star.ts'
+import { HPAStarPathfinder, scanBoundaryNodes, CoarseGraph } from '../../src/voxel/pathfinding/hpa-star.ts'
 import { StringPullSmoother } from '../../src/voxel/pathfinding/string-pull-smoother.ts'
 import { ReservationTable } from '../../src/voxel/pathfinding/reservation-table.ts'
 import { PassthroughSmoother } from '../../src/voxel/pathfinding/pathfinder-interface.ts'
 import type { TerrainChangeEvent } from '../../src/voxel/pathfinding/pathfinder-interface.ts'
-import { voxelEquals, voxelKey } from '../../src/voxel/pathfinding/types.ts'
+import { voxelEquals } from '../../src/voxel/pathfinding/types.ts'
 import type { VoxelCoord } from '../../src/voxel/pathfinding/types.ts'
 import { worldToChunk, CHUNK_SIZE } from '../../src/voxel/world/chunk-utils.ts'
 import { createAgent, resetAgentIdCounter } from '../../src/voxel/agents/agent.ts'
@@ -44,17 +44,6 @@ function makeEvent(pos: VoxelCoord, changeType: 'remove' | 'add', tick: number =
   }
 }
 
-function createTestEngine(grid: VoxelGrid, pathfinder: ReturnType<typeof createHPAPathfinder>): SimulationEngine {
-  const smoother = new PassthroughSmoother()
-  const agentManager = new AgentManager(pathfinder, smoother, grid)
-  const rng = createRNG(42)
-  return new SimulationEngine(grid, pathfinder, agentManager, rng)
-}
-
-function createHPAPathfinder(grid: VoxelGrid): HPAStarPathfinder {
-  const worldView = new GridWorldView(grid)
-  return new HPAStarPathfinder(worldView, grid.worldSize)
-}
 
 // ============================================================
 // HPA* Pathfinding
@@ -113,7 +102,6 @@ describe('HPA* Pathfinding', () => {
   it('only recomputes affected chunk on update', () => {
     const graph = new CoarseGraph()
     graph.build(worldView, 32, 2)
-    const initialCount = graph.nodeCount
 
     // Update a single chunk
     const wallPos: VoxelCoord = { x: 4, y: 1, z: 4 }
@@ -166,7 +154,6 @@ describe('Side-by-Side Comparison', () => {
   it('mirrored terrain: both engines have identical terrain', () => {
     const runner = new ComparisonRunner(32, 42)
     // Set up terrain on both sides
-    const pos: VoxelCoord = { x: 5, y: 1, z: 5 }
     runner.astarEngine.grid.setBlock({ x: 0, y: 0, z: 0 }, BlockType.Solid)
     runner.hpastarEngine.grid.setBlock({ x: 0, y: 0, z: 0 }, BlockType.Solid)
 
@@ -317,7 +304,8 @@ describe('Wait & Re-route', () => {
     }
 
     // After 5 ticks of waiting, agent should re-route (back to Navigating)
-    expect(agent.state === 'Navigating' || agent.state === 'Re-routing').toBe(true)
+    const stateAfter5 = agent.state as string
+    expect(stateAfter5 === 'Navigating' || stateAfter5 === 'Re-routing').toBe(true)
   })
 
   it('deadlock safety valve triggers at 20 wait ticks', () => {
@@ -336,7 +324,8 @@ describe('Wait & Re-route', () => {
     am.update()
 
     // At 20 ticks, forced re-route
-    expect(agent.waitTicks === 0 || agent.state === 'Navigating' || agent.state === 'Re-routing').toBe(true)
+    const stateAfter20 = agent.state as string
+    expect(agent.waitTicks === 0 || stateAfter20 === 'Navigating' || stateAfter20 === 'Re-routing').toBe(true)
   })
 })
 
@@ -623,7 +612,6 @@ describe('Handle Leak Sweep', () => {
     // but we remove the agent from the manager using splice directly
     // (bypassing removeAgent which would release the handle)
     const agentId = agent.id
-    const agents = am.getAgents()
     // Force remove without cleanup — simulate the leak scenario
     ;(am as any).agents = (am as any).agents.filter((a: any) => a.id !== agentId)
 

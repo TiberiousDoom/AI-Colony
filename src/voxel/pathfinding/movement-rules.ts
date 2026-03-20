@@ -1,4 +1,4 @@
-import { BlockType, isSolidBlock, isClimbable, isStair } from '../world/block-types.ts'
+import { isSolidBlock, isClimbable, isStair } from '../world/block-types.ts'
 import type { VoxelCoord } from './types.ts'
 import type { VoxelGrid } from '../world/voxel-grid.ts'
 

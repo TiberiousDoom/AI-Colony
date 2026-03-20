@@ -5,7 +5,7 @@ import { AgentManager } from '../agents/agent-manager.ts'
 import { PathfindingBudgetManager } from '../pathfinding/budget-manager.ts'
 import type { SeededRNG } from '../../utils/seed.ts'
 import { worldToChunk } from '../world/chunk-utils.ts'
-import type { VoxelCoord, ChunkCoord } from '../pathfinding/types.ts'
+import type { VoxelCoord } from '../pathfinding/types.ts'
 import { BlockType, isSolidBlock } from '../world/block-types.ts'
 import { isWalkable } from '../pathfinding/movement-rules.ts'
 import type { ReservationTable } from '../pathfinding/reservation-table.ts'
@@ -233,6 +233,7 @@ export class SimulationEngine {
       waitEvents: 0,
       totalWaitTicks: 0,
       tripsCompleted: 0,
+      pathSmoothness: 0,
     }
     this.budgetManager.clear()
   }

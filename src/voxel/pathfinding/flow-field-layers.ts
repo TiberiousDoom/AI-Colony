@@ -343,7 +343,7 @@ export function buildLayerSystem(grid: VoxelGrid, agentHeight: number): LayerSys
 export function updateLayerColumns(
   system: LayerSystem,
   grid: VoxelGrid,
-  changedVoxels: VoxelCoord[],
+  _changedVoxels: VoxelCoord[],
   agentHeight: number,
 ): Set<number> {
   // For correctness, rebuild the entire system when terrain changes.

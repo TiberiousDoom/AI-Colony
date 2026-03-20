@@ -15,7 +15,7 @@ import type {
   TerrainChangeEvent,
   MemoryReport,
 } from './pathfinder-interface.ts'
-import { worldToChunk, CHUNK_SIZE, chunkKey } from '../world/chunk-utils.ts'
+import { worldToChunk, chunkKey } from '../world/chunk-utils.ts'
 
 const MAX_ITERATIONS = 50_000
 const MAX_PATH_TRACE = 500

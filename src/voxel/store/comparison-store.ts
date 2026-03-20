@@ -3,10 +3,8 @@ import { ComparisonRunner, type ComparisonMetrics } from '../simulation/comparis
 import { BlockType } from '../world/block-types.ts'
 import { createAgent, resetAgentIdCounter } from '../agents/agent.ts'
 import type { Agent } from '../agents/agent.ts'
-import type { VoxelCoord } from '../pathfinding/types.ts'
-import { isWalkable } from '../pathfinding/movement-rules.ts'
 import { generateDiagnosticReport, generateComparisonReport } from '../simulation/diagnostic-report.ts'
-import { ScenarioRunner, type ScenarioDefinition, type PathfinderFactory } from '../simulation/scenario-runner.ts'
+import { ScenarioRunner, type PathfinderFactory } from '../simulation/scenario-runner.ts'
 import { GridAStarPathfinder } from '../pathfinding/grid-astar.ts'
 import { HPAStarPathfinder } from '../pathfinding/hpa-star.ts'
 import { createCanyonRunScenario } from '../simulation/scenarios/canyon-run.ts'
@@ -173,7 +171,7 @@ export const useComparisonStore = create<ComparisonStore>((set, get) => {
         ? createCanyonRunScenario()
         : createBridgeCollapseScenario()
 
-      const astarFactory: PathfinderFactory = (wv, ws) => new GridAStarPathfinder(wv)
+      const astarFactory: PathfinderFactory = (wv) => new GridAStarPathfinder(wv)
       const hpaFactory: PathfinderFactory = (wv, ws) => new HPAStarPathfinder(wv, ws)
 
       const astarResult = ScenarioRunner.run(scenario, astarFactory)
