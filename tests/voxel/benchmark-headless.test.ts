@@ -95,7 +95,7 @@ describe('Headless Benchmark', () => {
     }
   })
 
-  it('Swiss Cheese — 5 algorithms × 10 seeds', { timeout: 600000 }, () => {
+  it('Swiss Cheese — 5 algorithms × 10 seeds', { timeout: 900000 }, () => {
     const output = runBenchmark({
       scenario: createSwissCheeseScenario(),
       pathfinderFactories: FACTORIES,

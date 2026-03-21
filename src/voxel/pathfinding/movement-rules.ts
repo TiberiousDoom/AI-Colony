@@ -17,7 +17,8 @@ export interface Neighbor {
 
 function hasFloor(grid: VoxelGrid, pos: VoxelCoord): boolean {
   if (pos.y === 0) return true // world floor
-  return isSolidBlock(grid.getBlock({ x: pos.x, y: pos.y - 1, z: pos.z }))
+  const below = grid.getBlock({ x: pos.x, y: pos.y - 1, z: pos.z })
+  return isSolidBlock(below) || isClimbable(below) || isStair(below)
 }
 
 function hasClearance(grid: VoxelGrid, pos: VoxelCoord, height: number): boolean {
@@ -115,14 +116,23 @@ export function getNeighbors(
   for (const dir of CARDINAL_DIRS) {
     const nx = pos.x + dir.dx
     const nz = pos.z + dir.dz
-    const stairPos: VoxelCoord = { x: nx, y: pos.y, z: nz }
-    if (!grid.isInBounds(stairPos)) continue
-    if (!isStair(grid.getBlock(stairPos))) continue
 
-    // Stair takes us diagonally up: destination is 1 higher at (nx, y+1, nz)
-    const dest: VoxelCoord = { x: nx, y: pos.y + 1, z: nz }
-    if (grid.isInBounds(dest) && hasClearance(grid, dest, agentHeight)) {
-      neighbors.push({ coord: dest, cost: 1 / STAIR_SPEED, moveType: 'stair' })
+    // Stair ascent: adjacent block is a stair → move up
+    const stairPos: VoxelCoord = { x: nx, y: pos.y, z: nz }
+    if (grid.isInBounds(stairPos) && isStair(grid.getBlock(stairPos))) {
+      const dest: VoxelCoord = { x: nx, y: pos.y + 1, z: nz }
+      if (grid.isInBounds(dest) && hasClearance(grid, dest, agentHeight)) {
+        neighbors.push({ coord: dest, cost: 1 / STAIR_SPEED, moveType: 'stair' })
+      }
+    }
+
+    // Stair descent: block below adjacent position is a stair → move down
+    const belowAdj: VoxelCoord = { x: nx, y: pos.y - 1, z: nz }
+    if (grid.isInBounds(belowAdj) && isStair(grid.getBlock(belowAdj))) {
+      const dest: VoxelCoord = { x: nx, y: pos.y - 1, z: nz }
+      if (hasClearance(grid, dest, agentHeight)) {
+        neighbors.push({ coord: dest, cost: 1 / STAIR_SPEED, moveType: 'stair' })
+      }
     }
   }
 

@@ -171,9 +171,16 @@ function buildLayerGrids(candidates: WalkableCandidate[], layerCount: number, wo
 // ─── Vertical connection scanning ───────────────────────────────────
 
 function findLayerAt(layers: Layer[], x: number, z: number, y: number): number {
+  // Exact match first
   for (const layer of layers) {
     const cell = layer.grid[x][z]
     if (cell.walkable && cell.y === y) return layer.id
+  }
+  // ±1 Y tolerance: multiple walkable positions at same (x,z) in one layer
+  // may only store the lowest Y in the grid
+  for (const layer of layers) {
+    const cell = layer.grid[x][z]
+    if (cell.walkable && Math.abs(cell.y - y) <= 1) return layer.id
   }
   return -1
 }
@@ -376,8 +383,8 @@ export function updateLayerColumns(
  * Returns the layer ID or -1 if not on any layer.
  */
 export function getLayerAt(system: LayerSystem, x: number, z: number, y: number): number {
+  if (x < 0 || x >= system.worldSize || z < 0 || z >= system.worldSize) return -1
   for (const layer of system.layers) {
-    if (x < 0 || x >= system.worldSize || z < 0 || z >= system.worldSize) return -1
     const cell = layer.grid[x][z]
     if (cell.walkable && cell.y === y) return layer.id
   }
