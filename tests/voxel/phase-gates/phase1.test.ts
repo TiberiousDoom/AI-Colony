@@ -889,7 +889,7 @@ describe('Determinism — Additional', () => {
   it('determinism: different seeds produce different simulation states', () => {
     // Use longer runs with more ticks so RNG-driven behavior diverges
     const run1 = runSimulation(111, 100)
-    const run2 = runSimulation(222, 100)
+    runSimulation(222, 100)
     // With same fixed destinations, paths are the same but processing order
     // depends on agentId (deterministic). So verify the runs themselves are
     // internally consistent, and that at least the run function works.
