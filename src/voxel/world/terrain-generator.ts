@@ -1,7 +1,7 @@
 import { BlockType } from './block-types.ts'
 import type { VoxelGrid } from './voxel-grid.ts'
-import type { SeededRNG } from '../../utils/seed.ts'
-import { createNoise2D } from '../../utils/noise.ts'
+import type { SeededRNG } from '../../shared/seed.ts'
+import { createNoise2D } from '../../shared/noise.ts'
 
 export function generateTerrain(grid: VoxelGrid, rng: SeededRNG): void {
   const size = grid.worldSize

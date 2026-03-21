@@ -5,7 +5,7 @@ import type { IPathfinder, IPathSmoother } from '../pathfinding/pathfinder-inter
 import { AgentManager } from '../agents/agent-manager.ts'
 import { SimulationEngine, type SimulationMetrics } from './simulation-engine.ts'
 import { EventLogger, type LogEntry } from './event-logger.ts'
-import { createRNG } from '../../utils/seed.ts'
+import { createRNG } from '../../shared/seed.ts'
 import { resetAgentIdCounter } from '../agents/agent.ts'
 
 export interface ScenarioDefinition {

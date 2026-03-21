@@ -59,6 +59,7 @@ export class HybridHandle implements NavigationHandle {
       if (this.onSegmentTransition) {
         const newHandle = this.onSegmentTransition(currentPosition, nextWaypoint)
         if (newHandle) {
+          this.releaseSubHandle()
           this.subHandle = newHandle
           return this.subHandle.getNextVoxel(currentPosition)
         }
@@ -82,14 +83,23 @@ export class HybridHandle implements NavigationHandle {
 
   /** Switch sub-handle to a flow field (promotion) */
   switchToFlowField(flowFieldHandle: NavigationHandle): void {
+    this.releaseSubHandle()
     this.subHandle = flowFieldHandle
     this._subType = 'flowfield'
   }
 
   /** Switch sub-handle back to D* Lite (demotion) */
   switchToDStar(dstarHandle: NavigationHandle): void {
+    this.releaseSubHandle()
     this.subHandle = dstarHandle
     this._subType = this.coarseRoute ? 'hpastar-dstar' : 'dstar'
+  }
+
+  /** Release the current sub-handle if it supports cleanup */
+  private releaseSubHandle(): void {
+    if (this.subHandle && 'release' in this.subHandle && typeof (this.subHandle as { release: () => void }).release === 'function') {
+      (this.subHandle as { release: () => void }).release()
+    }
   }
 
   /** Get the active sub-algorithm type (used for congestion strategy) */
@@ -107,6 +117,7 @@ export class HybridHandle implements NavigationHandle {
 
   release(): void {
     this._released = true
+    this.releaseSubHandle()
   }
 
   getPlannedPath(currentPosition: VoxelCoord): VoxelCoord[] | null {
