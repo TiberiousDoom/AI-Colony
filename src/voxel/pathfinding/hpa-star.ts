@@ -9,6 +9,7 @@ import type {
   MemoryReport,
 } from './pathfinder-interface.ts'
 import { CHUNK_SIZE, worldToChunk, chunkKey, chunkEquals } from '../world/chunk-utils.ts'
+import { isClimbable, isStair } from '../world/block-types.ts'
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -86,11 +87,24 @@ export function scanBoundaryNodes(
     for (let i = 0; i < CHUNK_SIZE; i++) {
       for (let j = 0; j < CHUNK_SIZE; j++) {
         const [inside, outside] = iter(i, j)
+        // Standard walkable-to-walkable boundary
         if (
           worldView.isWalkable(inside, agentHeight) &&
           worldView.isWalkable(outside, agentHeight)
         ) {
           nodes.push({ pos: inside, face })
+          continue
+        }
+        // Vertical ladder/stair boundary: climbable blocks crossing chunk faces
+        if (face === 'y+' || face === 'y-') {
+          const insideBlock = worldView.getBlockType(inside)
+          const outsideBlock = worldView.getBlockType(outside)
+          if (
+            (isClimbable(insideBlock) || isStair(insideBlock)) &&
+            (isClimbable(outsideBlock) || isStair(outsideBlock) || worldView.isWalkable(outside, agentHeight))
+          ) {
+            nodes.push({ pos: inside, face })
+          }
         }
       }
     }

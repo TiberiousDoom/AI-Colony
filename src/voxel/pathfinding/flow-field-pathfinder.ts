@@ -35,6 +35,32 @@ import {
 } from './flow-field-dijkstra.ts'
 import { FlowFieldCache, type FlowFieldCacheConfig } from './flow-field-cache.ts'
 
+// ─── Path expansion for vertical transitions ─────────────────────────
+
+/**
+ * Expand a raw layer path to include intermediate climbing/descending steps.
+ * When consecutive points differ by more than 1 in Y at the same (x,z),
+ * insert per-voxel vertical steps.
+ */
+function expandVerticalTransitions(rawPath: VoxelCoord[]): VoxelCoord[] {
+  if (rawPath.length <= 1) return rawPath
+  const expanded: VoxelCoord[] = [rawPath[0]]
+  for (let i = 1; i < rawPath.length; i++) {
+    const prev = rawPath[i - 1]
+    const curr = rawPath[i]
+    const dy = curr.y - prev.y
+    // Insert climbing/descending steps for same (x,z) or adjacent transitions
+    if (Math.abs(dy) > 1) {
+      const step = dy > 0 ? 1 : -1
+      for (let y = prev.y + step; step > 0 ? y < curr.y : y > curr.y; y += step) {
+        expanded.push({ x: prev.x, y, z: prev.z })
+      }
+    }
+    expanded.push(curr)
+  }
+  return expanded
+}
+
 // ─── Fallback A* on layer graph ─────────────────────────────────────
 
 function layerAStar(
@@ -138,6 +164,8 @@ class FlowFieldHandle implements NavigationHandle {
   private _valid: boolean = true
   private cachedPath: VoxelCoord[] | null = null
   private cachedPathKey: string | null = null
+  /** Queued intermediate climbing steps for multi-Y transitions */
+  private climbQueue: VoxelCoord[] = []
   readonly agentId: number
 
   constructor(field: FlowField, system: LayerSystem, startLayerId: number, agentId: number) {
@@ -149,6 +177,11 @@ class FlowFieldHandle implements NavigationHandle {
 
   getNextVoxel(currentPosition: VoxelCoord): VoxelCoord | null {
     if (!this._valid) return null
+
+    // Drain any queued climbing steps first
+    if (this.climbQueue.length > 0) {
+      return this.climbQueue.shift()!
+    }
 
     const size = this.system.worldSize
 
@@ -166,6 +199,15 @@ class FlowFieldHandle implements NavigationHandle {
       const target = getTransitionTarget(this.field, this.currentLayerId, currentPosition.x, currentPosition.z)
       if (target) {
         this.currentLayerId = target.targetLayer
+        const dy = target.targetPos.y - currentPosition.y
+        // For multi-Y transitions, queue intermediate steps
+        if (Math.abs(dy) > 1) {
+          const step = dy > 0 ? 1 : -1
+          for (let y = currentPosition.y + step; step > 0 ? y <= target.targetPos.y : y >= target.targetPos.y; y += step) {
+            this.climbQueue.push({ x: currentPosition.x, y, z: currentPosition.z })
+          }
+          return this.climbQueue.shift()!
+        }
         return target.targetPos
       }
     }
@@ -372,9 +414,10 @@ export class FlowFieldPathfinder implements IPathfinder {
   ): NavigationHandle | null {
     if (startLayer < 0 || destLayer < 0) return null
 
-    const path = layerAStar(this.layerSystem, startLayer, start, destLayer, destination)
-    if (!path) return null
+    const rawPath = layerAStar(this.layerSystem, startLayer, start, destLayer, destination)
+    if (!rawPath) return null
 
+    const path = expandVerticalTransitions(rawPath)
     const handle = new AStarFallbackHandle(path, agentId)
     this.activeHandles.set(agentId, handle)
     return handle

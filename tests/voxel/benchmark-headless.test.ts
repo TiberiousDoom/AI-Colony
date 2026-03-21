@@ -13,6 +13,7 @@ import { HPAStarPathfinder } from '../../src/voxel/pathfinding/hpa-star.ts'
 import { FlowFieldPathfinder } from '../../src/voxel/pathfinding/flow-field-pathfinder.ts'
 import { DStarLitePathfinder } from '../../src/voxel/pathfinding/dstar-lite.ts'
 import { HybridPathfinder } from '../../src/voxel/pathfinding/hybrid-pathfinder.ts'
+import { AdaptivePathfinder } from '../../src/voxel/pathfinding/adaptive-pathfinder.ts'
 import type { PathfinderFactory } from '../../src/voxel/simulation/scenario-runner.ts'
 import { createCanyonRunScenario } from '../../src/voxel/simulation/scenarios/canyon-run.ts'
 import { createBridgeCollapseScenario } from '../../src/voxel/simulation/scenarios/bridge-collapse.ts'
@@ -31,6 +32,7 @@ const FACTORIES = new Map<string, PathfinderFactory>([
   ['FlowField', (wv, ws) => new FlowFieldPathfinder(wv, ws)],
   ['D* Lite', (wv, ws) => new DStarLitePathfinder(wv, ws)],
   ['Hybrid', (wv, ws) => new HybridPathfinder(wv, ws)],
+  ['Adaptive', (wv, ws) => new AdaptivePathfinder(wv, ws)],
 ])
 
 describe('Headless Benchmark', () => {
@@ -95,7 +97,7 @@ describe('Headless Benchmark', () => {
     }
   })
 
-  it('Swiss Cheese — 5 algorithms × 10 seeds', { timeout: 600000 }, () => {
+  it('Swiss Cheese — 5 algorithms × 10 seeds', { timeout: 900000 }, () => {
     const output = runBenchmark({
       scenario: createSwissCheeseScenario(),
       pathfinderFactories: FACTORIES,

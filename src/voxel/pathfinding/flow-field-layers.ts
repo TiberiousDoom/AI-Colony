@@ -56,6 +56,8 @@ interface WalkableCandidate {
   y: number
   z: number
   layerId: number // -1 = unassigned
+  /** True if standing on a stair or climbable block (used to prevent layer bridging) */
+  onVerticalStructure: boolean
 }
 
 function scanWalkableSurfaces(grid: VoxelGrid, agentHeight: number): WalkableCandidate[] {
@@ -66,7 +68,12 @@ function scanWalkableSurfaces(grid: VoxelGrid, agentHeight: number): WalkableCan
     for (let z = 0; z < size; z++) {
       for (let y = 0; y < size; y++) {
         if (isWalkable(grid, { x, y, z }, agentHeight)) {
-          candidates.push({ x, y, z, layerId: -1 })
+          let onVerticalStructure = false
+          if (y > 0) {
+            const below = grid.getBlock({ x, y: y - 1, z })
+            onVerticalStructure = isClimbable(below) || isStair(below)
+          }
+          candidates.push({ x, y, z, layerId: -1, onVerticalStructure })
         }
       }
     }
@@ -126,6 +133,12 @@ function assignLayers(candidates: WalkableCandidate[], worldSize: number): numbe
         for (const nb of neighbors) {
           if (nb.layerId >= 0) continue
           if (Math.abs(nb.y - current.y) <= 1) {
+            // Prevent stairs/ladders from bridging different Y levels into one layer.
+            // Without this, a staircase creates a continuous ±1 Y gradient that merges
+            // all floors into a single layer, losing upper-floor data.
+            if (current.y !== nb.y && (current.onVerticalStructure || nb.onVerticalStructure)) {
+              continue
+            }
             nb.layerId = layerId
             queue.push(nb)
           }
@@ -171,9 +184,16 @@ function buildLayerGrids(candidates: WalkableCandidate[], layerCount: number, wo
 // ─── Vertical connection scanning ───────────────────────────────────
 
 function findLayerAt(layers: Layer[], x: number, z: number, y: number): number {
+  // Exact match first
   for (const layer of layers) {
     const cell = layer.grid[x][z]
     if (cell.walkable && cell.y === y) return layer.id
+  }
+  // ±1 Y tolerance: multiple walkable positions at same (x,z) in one layer
+  // may only store the lowest Y in the grid
+  for (const layer of layers) {
+    const cell = layer.grid[x][z]
+    if (cell.walkable && Math.abs(cell.y - y) <= 1) return layer.id
   }
   return -1
 }
@@ -189,40 +209,48 @@ function scanVerticalConnections(
 
   for (let x = 0; x < size; x++) {
     for (let z = 0; z < size; z++) {
-      // Ladder connections: scan for ladder columns connecting two layers
-      for (let y = 0; y < size; y++) {
-        const pos: VoxelCoord = { x, y, z }
-        if (!isClimbable(grid.getBlock(pos))) continue
-
-        // Find the bottom: walkable surface below the ladder
-        if (y > 0 && isWalkable(grid, { x, y: y, z }, agentHeight)) {
-          // This is a walkable cell on a ladder — look for the top
-          let topY = y
-          while (topY + 1 < size && isClimbable(grid.getBlock({ x, y: topY + 1, z }))) {
-            topY++
+      // Ladder connections: find all layers with walkable cells at this column,
+      // then connect consecutive pairs that have contiguous ladder blocks between them.
+      // This replaces the old approach which only connected bottom-to-top,
+      // missing intermediate floor connections.
+      {
+        const layerPoints: { y: number; layerId: number }[] = []
+        for (const layer of layers) {
+          const cell = layer.grid[x][z]
+          if (cell.walkable) {
+            layerPoints.push({ y: cell.y, layerId: layer.id })
           }
-          // Check if the cell above the top ladder is walkable
-          const exitY = topY + 1
-          if (exitY < size && isWalkable(grid, { x, y: exitY, z }, agentHeight)) {
-            const bottomLayer = findLayerAt(layers, x, z, y)
-            const topLayer = findLayerAt(layers, x, z, exitY)
-            if (bottomLayer >= 0 && topLayer >= 0 && bottomLayer !== topLayer) {
-              const key = `ladder:${bottomLayer}:${topLayer}:${x}:${z}`
-              if (!seen.has(key)) {
-                seen.add(key)
-                const height = exitY - y
-                connections.push({
-                  fromLayer: bottomLayer,
-                  toLayer: topLayer,
-                  x, z,
-                  fromY: y,
-                  toY: exitY,
-                  connectionType: 'ladder',
-                  cost: height / LADDER_SPEED,
-                  bidirectional: true,
-                })
-              }
+        }
+        layerPoints.sort((a, b) => a.y - b.y)
+
+        for (let i = 0; i < layerPoints.length - 1; i++) {
+          const from = layerPoints[i]
+          const to = layerPoints[i + 1]
+          if (from.layerId === to.layerId) continue
+
+          // Verify contiguous climbable blocks between the two layer positions
+          let hasLadder = true
+          for (let y = from.y; y < to.y; y++) {
+            if (!isClimbable(grid.getBlock({ x, y, z }))) {
+              hasLadder = false
+              break
             }
+          }
+          if (!hasLadder) continue
+
+          const key = `ladder:${from.layerId}:${to.layerId}:${x}:${z}`
+          if (!seen.has(key)) {
+            seen.add(key)
+            connections.push({
+              fromLayer: from.layerId,
+              toLayer: to.layerId,
+              x, z,
+              fromY: from.y,
+              toY: to.y,
+              connectionType: 'ladder',
+              cost: (to.y - from.y) / LADDER_SPEED,
+              bidirectional: true,
+            })
           }
         }
       }
@@ -376,8 +404,8 @@ export function updateLayerColumns(
  * Returns the layer ID or -1 if not on any layer.
  */
 export function getLayerAt(system: LayerSystem, x: number, z: number, y: number): number {
+  if (x < 0 || x >= system.worldSize || z < 0 || z >= system.worldSize) return -1
   for (const layer of system.layers) {
-    if (x < 0 || x >= system.worldSize || z < 0 || z >= system.worldSize) return -1
     const cell = layer.grid[x][z]
     if (cell.walkable && cell.y === y) return layer.id
   }

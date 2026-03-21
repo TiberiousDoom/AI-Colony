@@ -22,14 +22,21 @@ const MAX_PATH_TRACE = 500
 
 function chunkScopeKeys(start: VoxelCoord, goal: VoxelCoord): Set<string> {
   const keys = new Set<string>()
-  // Union of 3×3×3 neighborhoods around both start and goal
-  for (const center of [start, goal]) {
-    const cc = worldToChunk(center)
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dz = -1; dz <= 1; dz++) {
-          keys.add(chunkKey({ cx: cc.cx + dx, cy: cc.cy + dy, cz: cc.cz + dz }))
-        }
+  const sc = worldToChunk(start)
+  const gc = worldToChunk(goal)
+
+  // Compute bounding box of chunks between start and goal, expanded by 1
+  const minCx = Math.min(sc.cx, gc.cx) - 1
+  const maxCx = Math.max(sc.cx, gc.cx) + 1
+  const minCy = Math.min(sc.cy, gc.cy) - 1
+  const maxCy = Math.max(sc.cy, gc.cy) + 1
+  const minCz = Math.min(sc.cz, gc.cz) - 1
+  const maxCz = Math.max(sc.cz, gc.cz) + 1
+
+  for (let cx = minCx; cx <= maxCx; cx++) {
+    for (let cy = minCy; cy <= maxCy; cy++) {
+      for (let cz = minCz; cz <= maxCz; cz++) {
+        keys.add(chunkKey({ cx, cy, cz }))
       }
     }
   }
