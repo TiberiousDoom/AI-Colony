@@ -672,6 +672,87 @@ describe('Scenarios', () => {
 // ============================================================
 // Diagnostic Report
 // ============================================================
+// ============================================================
+// Reservation — Additional Coverage
+// ============================================================
+describe('Reservation — Additional', () => {
+  it('reservation: other agents route around reserved voxels', () => {
+    const grid = createFlatWorld(32)
+    const worldView = new GridWorldView(grid)
+    const pf = new GridAStarPathfinder(worldView)
+    const table = new ReservationTable()
+    const smoother = new PassthroughSmoother()
+    const am = new AgentManager(pf, smoother, grid, table)
+
+    resetAgentIdCounter()
+    const agent1 = createAgent({ x: 2, y: 1, z: 5 })
+    const agent2 = createAgent({ x: 2, y: 1, z: 7 })
+    am.addAgent(agent1)
+    am.addAgent(agent2)
+    am.assignDestination(agent1, { x: 10, y: 1, z: 5 })
+    am.assignDestination(agent2, { x: 10, y: 1, z: 5 })
+
+    // Reserve agent1's path positions for tick 0
+    const path1 = agent1.navigationHandle!.getPlannedPath(agent1.position)!
+    table.reserve(agent1.id, 0, path1.slice(0, 4))
+
+    // Agent 2 should see those positions as reserved (not for itself)
+    expect(table.isReserved(0, path1[1], agent2.id)).toBe(true)
+    expect(table.isReserved(0, path1[1], agent1.id)).toBe(false) // self excluded
+  })
+
+  it('reservation: multiple agents on distinct ticks do not conflict', () => {
+    const table = new ReservationTable()
+    const pos: VoxelCoord = { x: 5, y: 1, z: 5 }
+    table.reserve(1, 0, [pos])
+    table.reserve(2, 1, [pos])
+    // Agent 1 at tick 0, agent 2 at tick 1 — no conflict
+    expect(table.isReserved(0, pos, 2)).toBe(true)  // agent 2 sees agent 1
+    expect(table.isReserved(1, pos, 1)).toBe(true)  // agent 1 sees agent 2
+    expect(table.isReserved(0, pos, 1)).toBe(false)  // agent 1 excluded from own tick
+    expect(table.isReserved(1, pos, 2)).toBe(false)  // agent 2 excluded from own tick
+  })
+
+  it('reservation: getReservedBy returns correct agent ID', () => {
+    const table = new ReservationTable()
+    const pos: VoxelCoord = { x: 5, y: 1, z: 5 }
+    table.reserve(42, 0, [pos])
+    expect(table.getReservedBy(0, pos)).toBe(42)
+    expect(table.getReservedBy(1, pos)).toBeUndefined()
+  })
+})
+
+// ============================================================
+// HPA* — Additional Coverage
+// ============================================================
+describe('HPA* — Additional', () => {
+  it('hpastar: handles 2-tall clearance at chunk boundaries', () => {
+    const grid = createFlatWorld(32)
+    // Place low ceiling at chunk boundary (x=7→8) blocking 2-tall agents
+    for (let z = 0; z < 32; z++) {
+      grid.setBlock({ x: 7, y: 2, z }, BlockType.Solid)
+      grid.setBlock({ x: 8, y: 2, z }, BlockType.Solid)
+    }
+    const worldView = new GridWorldView(grid)
+    const pf = new HPAStarPathfinder(worldView, 32)
+
+    const start: VoxelCoord = { x: 4, y: 1, z: 4 }
+    const dest: VoxelCoord = { x: 12, y: 1, z: 4 }
+    const handle = pf.requestNavigation(start, dest, 2, 1)
+
+    // Path should either be null (blocked) or route over the ceiling
+    if (handle) {
+      const path = handle.getPlannedPath(start)
+      if (path) {
+        // Every voxel on path must have 2-block clearance
+        for (const p of path) {
+          expect(isWalkable(grid, p, 2)).toBe(true)
+        }
+      }
+    }
+  })
+})
+
 describe('Diagnostic Report', () => {
   it('generates valid markdown report', () => {
     const report = generateDiagnosticReport({

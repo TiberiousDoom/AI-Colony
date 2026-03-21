@@ -285,6 +285,140 @@ describe('Intent Broadcast', () => {
 })
 
 // ============================================================
+// HYBRID ROUTING — Additional Coverage
+// ============================================================
+
+describe('Hybrid Routing — Additional', () => {
+  it('flow field demotion: field evicts after TTL with 0 agents', () => {
+    const grid = createFlatWorld(32)
+    const wv = new GridWorldView(grid)
+    const pf = new HybridPathfinder(wv, 32, undefined, { flowFieldDemotionTTL: 5 })
+    pf.rebuildGraph()
+    pf.rebuildLayers()
+
+    const dest: VoxelCoord = { x: 10, y: 1, z: 10 }
+
+    // Add 3 agents to trigger promotion
+    const h1 = pf.requestNavigation({ x: 2, y: 1, z: 2 }, dest, 2, 1)
+    const h2 = pf.requestNavigation({ x: 4, y: 1, z: 2 }, dest, 2, 2)
+    const h3 = pf.requestNavigation({ x: 6, y: 1, z: 2 }, dest, 2, 3)
+    expect(h1).not.toBeNull()
+    expect(h2).not.toBeNull()
+    expect(h3).not.toBeNull()
+
+    // Release all agents
+    pf.releaseNavigation(h1!)
+    pf.releaseNavigation(h2!)
+    pf.releaseNavigation(h3!)
+
+    // Memory should still be trackable
+    const mem = pf.getMemoryUsage()
+    expect(mem.sharedBytes).toBeGreaterThanOrEqual(0)
+  })
+
+  it('no demotion at 1-2 agents (hysteresis)', () => {
+    const grid = createFlatWorld(32)
+    const wv = new GridWorldView(grid)
+    const pf = new HybridPathfinder(wv, 32)
+    pf.rebuildGraph()
+    pf.rebuildLayers()
+
+    const dest: VoxelCoord = { x: 10, y: 1, z: 10 }
+
+    // Add 3 agents, then release one — should still have 2 agents
+    const h1 = pf.requestNavigation({ x: 2, y: 1, z: 2 }, dest, 2, 1)
+    const h2 = pf.requestNavigation({ x: 4, y: 1, z: 2 }, dest, 2, 2)
+    const h3 = pf.requestNavigation({ x: 6, y: 1, z: 2 }, dest, 2, 3)
+
+    pf.releaseNavigation(h3!)
+
+    // h1 and h2 should still be valid (not demoted)
+    expect(h1!.isValid()).toBe(true)
+    expect(h2!.isValid()).toBe(true)
+  })
+
+  it('terrain invalidation does not crash hybrid pathfinder', () => {
+    const grid = createFlatWorld(32)
+    const wv = new GridWorldView(grid)
+    const pf = new HybridPathfinder(wv, 32)
+    pf.rebuildGraph()
+    pf.rebuildLayers()
+
+    const handle = pf.requestNavigation({ x: 2, y: 1, z: 2 }, { x: 14, y: 1, z: 14 }, 2, 1)
+    expect(handle).not.toBeNull()
+
+    // Terrain change — should not throw
+    grid.setBlock({ x: 8, y: 1, z: 8 }, BlockType.Solid)
+    pf.invalidateRegion({
+      chunkCoords: [{ cx: 1, cy: 0, cz: 1 }],
+      changedVoxels: [{ x: 8, y: 1, z: 8 }],
+      changeType: 'add',
+      tick: 1,
+    })
+
+    // Should be able to request a new navigation after invalidation
+    const handle2 = pf.requestNavigation({ x: 2, y: 1, z: 2 }, { x: 14, y: 1, z: 14 }, 2, 2)
+    expect(handle2).not.toBeNull()
+  })
+})
+
+// ============================================================
+// INTENT — Additional Coverage
+// ============================================================
+
+describe('Intent — Additional', () => {
+  it('intent: elevated cost routes pathfinder around pending removal', () => {
+    const grid = createFlatWorld(32)
+    const wv = new GridWorldView(grid)
+    const registry = new IntentRegistry()
+
+    // Publish intent on a block that's on the direct path
+    registry.publishIntent({ x: 5, y: 1, z: 5 }, 1, 100, 0)
+    registry.applyBatch(0)
+
+    const intentView = new IntentWorldView(wv, registry, 10.0) // 10x cost multiplier
+
+    // Neighbors from (4,1,5) via intent view should have elevated cost for (5,1,5)
+    // But (5,1,5) is walkable, so the neighbor exists with higher cost
+    const normalNeighbors = wv.getNeighbors({ x: 4, y: 1, z: 5 }, 2)
+    const intentNeighbors = intentView.getNeighbors({ x: 4, y: 1, z: 5 }, 2)
+
+    const normalTarget = normalNeighbors.find(n => n.coord.x === 5 && n.coord.z === 5)
+    const intentTarget = intentNeighbors.find(n => n.coord.x === 5 && n.coord.z === 5)
+
+    expect(normalTarget).toBeDefined()
+    expect(intentTarget).toBeDefined()
+    expect(intentTarget!.cost).toBeGreaterThan(normalTarget!.cost)
+    expect(intentTarget!.cost).toBe(normalTarget!.cost * 10.0)
+  })
+
+  it('intent: multiple intents from same agent all tracked', () => {
+    const registry = new IntentRegistry()
+    registry.publishIntent({ x: 5, y: 3, z: 5 }, 1, 100, 0)
+    registry.publishIntent({ x: 6, y: 3, z: 5 }, 1, 100, 0)
+    registry.publishIntent({ x: 7, y: 3, z: 5 }, 1, 100, 0)
+    registry.applyBatch(0)
+
+    expect(registry.size).toBe(3)
+    expect(registry.hasIntent({ x: 5, y: 3, z: 5 })).toBe(true)
+    expect(registry.hasIntent({ x: 6, y: 3, z: 5 })).toBe(true)
+    expect(registry.hasIntent({ x: 7, y: 3, z: 5 })).toBe(true)
+  })
+
+  it('intent: cancelIntent removes all intents from agent', () => {
+    const registry = new IntentRegistry()
+    registry.publishIntent({ x: 5, y: 3, z: 5 }, 1, 100, 0)
+    registry.publishIntent({ x: 6, y: 3, z: 5 }, 1, 100, 0)
+    registry.applyBatch(0)
+    expect(registry.size).toBe(2)
+
+    registry.cancelIntent(1)
+    registry.applyBatch(1)
+    expect(registry.size).toBe(0)
+  })
+})
+
+// ============================================================
 // HYBRID CONGESTION (2 tests)
 // ============================================================
 

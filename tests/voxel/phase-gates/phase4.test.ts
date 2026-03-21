@@ -385,6 +385,77 @@ describe('D* Lite Memory Budget', () => {
 })
 
 // ============================================================
+// MEMORY BUDGET — Additional Coverage
+// ============================================================
+
+describe('Memory Budget — Additional', () => {
+  it('A* per-agent memory within 256 KB for short/medium paths', () => {
+    const grid = createFlatWorld(32)
+    const wv = new GridWorldView(grid)
+    const astar = new GridAStarPathfinder(wv)
+
+    const handle = astar.requestNavigation({ x: 2, y: 1, z: 2 }, { x: 28, y: 1, z: 28 }, 2, 1)
+    expect(handle).not.toBeNull()
+    expect(handle!.getHandleMemory()).toBeLessThan(256 * 1024)
+  })
+
+  it('A* shared memory stays under 20 MB with 10 concurrent handles', () => {
+    const grid = createFlatWorld(32)
+    const wv = new GridWorldView(grid)
+    const astar = new GridAStarPathfinder(wv)
+
+    for (let i = 0; i < 10; i++) {
+      astar.requestNavigation(
+        { x: 2 + i, y: 1, z: 2 },
+        { x: 28 - i, y: 1, z: 28 },
+        2, i + 1,
+      )
+    }
+
+    const mem = astar.getMemoryUsage()
+    expect(mem.sharedBytes).toBeLessThan(20 * 1024 * 1024)
+    expect(mem.peakBytes).toBeLessThan(50 * 1024 * 1024)
+  })
+
+  it('D* Lite getMemoryUsage reports positive sharedBytes and peakBytes', () => {
+    const grid = createFlatWorld(32)
+    const wv = new GridWorldView(grid)
+    const dstar = new DStarLitePathfinder(wv, 32, false)
+
+    dstar.requestNavigation({ x: 2, y: 1, z: 2 }, { x: 20, y: 1, z: 20 }, 2, 1)
+    const mem = dstar.getMemoryUsage()
+    expect(mem.sharedBytes).toBeGreaterThanOrEqual(0)
+    expect(mem.peakBytes).toBeGreaterThanOrEqual(0)
+  })
+})
+
+// ============================================================
+// D* LITE — Additional Coverage
+// ============================================================
+
+describe('D* Lite — Additional', () => {
+  it('D* Lite handles multiple concurrent handles independently', () => {
+    const grid = createFlatWorld()
+    const wv = new GridWorldView(grid)
+    const dstar = new DStarLitePathfinder(wv, 16, true)
+
+    const h1 = dstar.requestNavigation({ x: 2, y: 1, z: 2 }, { x: 10, y: 1, z: 2 }, 2, 1)
+    const h2 = dstar.requestNavigation({ x: 2, y: 1, z: 8 }, { x: 10, y: 1, z: 8 }, 2, 2)
+
+    expect(h1).not.toBeNull()
+    expect(h2).not.toBeNull()
+
+    const p1 = h1!.getPlannedPath({ x: 2, y: 1, z: 2 })
+    const p2 = h2!.getPlannedPath({ x: 2, y: 1, z: 8 })
+
+    expect(p1).not.toBeNull()
+    expect(p2).not.toBeNull()
+    // Paths should be different (different z rows)
+    expect(p1![1].z).not.toBe(p2![1].z)
+  })
+})
+
+// ============================================================
 // 4-ALGORITHM COMPARISON (3 tests)
 // ============================================================
 

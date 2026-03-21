@@ -630,6 +630,147 @@ describe('Diagnostic Report', () => {
 
 import { SpatialHash } from '../../../src/voxel/pathfinding/spatial-hash.ts'
 
+// ============================================================
+// FLOW FIELD LAYERS — Additional Coverage
+// ============================================================
+
+describe('Flow Field Layers — Additional', () => {
+  it('step-up creates bidirectional connection (±1 Y)', () => {
+    const grid = new VoxelGrid(16)
+    // Floor 1 at y=0
+    for (let x = 0; x < 16; x++) {
+      for (let z = 0; z < 16; z++) {
+        grid.setBlock({ x, y: 0, z }, BlockType.Solid)
+      }
+    }
+    // Raised section at y=1 for x>=8
+    for (let x = 8; x < 16; x++) {
+      for (let z = 0; z < 16; z++) {
+        grid.setBlock({ x, y: 1, z }, BlockType.Solid)
+      }
+    }
+    // This is a step-up of 1 — should merge into a single connected layer
+    const system = buildLayerSystem(grid, 2)
+    // Single layer because ±1 Y merges via flood fill
+    expect(system.layers.length).toBe(1)
+
+    // Verify cells on both sides are walkable in the same layer
+    const layer = system.layers[0]
+    expect(layer.grid[4][4].walkable).toBe(true)   // low side at y=1
+    expect(layer.grid[10][4].walkable).toBe(true)   // high side at y=2
+  })
+})
+
+// ============================================================
+// FLOW FIELD CACHE — Additional Coverage
+// ============================================================
+
+describe('Flow Field Cache — Additional', () => {
+  it('cache: maxFields evicts oldest when full', () => {
+    const cache = new FlowFieldCache({ maxFields: 2 })
+    const grid = createFlatWorld()
+    const system = buildLayerSystem(grid, 2)
+
+    const field1 = computeFlowField(system, { x: 5, y: 1, z: 5 }, 0, 0)
+    const field2 = computeFlowField(system, { x: 10, y: 1, z: 10 }, 0, 5)
+    cache.set(field1)
+    cache.set(field2)
+    expect(cache.size).toBe(2)
+
+    // Third field should evict the oldest (field1, last accessed at tick 0)
+    const field3 = computeFlowField(system, { x: 3, y: 1, z: 3 }, 0, 10)
+    cache.set(field3)
+    expect(cache.size).toBe(2)
+    // field1 should have been evicted
+    expect(cache.get(field1.destinationKey, 10)).toBeNull()
+    expect(cache.get(field2.destinationKey, 10)).not.toBeNull()
+  })
+
+  it('cache: sweep returns count of evicted fields', () => {
+    const cache = new FlowFieldCache({ ttl: 5 })
+    const grid = createFlatWorld()
+    const system = buildLayerSystem(grid, 2)
+
+    const field1 = computeFlowField(system, { x: 5, y: 1, z: 5 }, 0, 0)
+    const field2 = computeFlowField(system, { x: 10, y: 1, z: 10 }, 0, 0)
+    cache.set(field1)
+    cache.set(field2)
+
+    const evicted = cache.sweep(10)
+    expect(evicted).toBe(2)
+    expect(cache.size).toBe(0)
+  })
+})
+
+// ============================================================
+// FLOW FIELD — Terrain Invalidation
+// ============================================================
+
+describe('Flow Field — Terrain Invalidation', () => {
+  it('invalidateRegion removes affected flow fields from cache', () => {
+    const grid = createFlatWorld()
+    const wv = new GridWorldView(grid)
+    const pf = new FlowFieldPathfinder(wv, 16, 2, { sharingThreshold: 1 })
+
+    // Create a handle (populates cache with flow field)
+    const h = pf.requestNavigation({ x: 2, y: 1, z: 2 }, { x: 10, y: 1, z: 10 }, 2, 1)
+    expect(h).not.toBeNull()
+
+    // Terrain change near the destination
+    grid.setBlock({ x: 10, y: 1, z: 9 }, BlockType.Solid)
+    pf.invalidateRegion({
+      chunkCoords: [{ cx: 1, cy: 0, cz: 1 }],
+      changedVoxels: [{ x: 10, y: 1, z: 9 }],
+      changeType: 'add',
+      tick: 1,
+    })
+
+    // The handle should be invalidated
+    expect(h!.isValid()).toBe(false)
+  })
+
+  it('FlowFieldPathfinder memory report tracks shared bytes', () => {
+    const grid = createFlatWorld()
+    const wv = new GridWorldView(grid)
+    const pf = new FlowFieldPathfinder(wv, 16, 2, { sharingThreshold: 1 })
+
+    pf.requestNavigation({ x: 2, y: 1, z: 2 }, { x: 10, y: 1, z: 10 }, 2, 1)
+    pf.requestNavigation({ x: 4, y: 1, z: 2 }, { x: 10, y: 1, z: 10 }, 2, 2)
+
+    const mem = pf.getMemoryUsage()
+    // Shared bytes should include the flow field for the shared destination
+    expect(mem.sharedBytes).toBeGreaterThan(0)
+    expect(mem.peakBytes).toBeGreaterThanOrEqual(mem.sharedBytes)
+  })
+})
+
+// ============================================================
+// DUAL CONGESTION — Additional Coverage
+// ============================================================
+
+describe('Dual Congestion — Additional', () => {
+  it('density: isOccupied returns -1 when nobody is at target', () => {
+    const dm = new DensityCongestionManager()
+    const target: VoxelCoord = { x: 5, y: 1, z: 5 }
+    const agents = [
+      { id: 1, position: { x: 3, y: 1, z: 3 } },
+      { id: 2, position: { x: 7, y: 1, z: 7 } },
+    ]
+    expect(dm.isOccupied(target, 1, agents)).toBe(-1)
+  })
+
+  it('density: group scatter does not trigger with agents outside 3-voxel radius', () => {
+    const dm = new DensityCongestionManager()
+    const farAgents = [
+      { id: 1, position: { x: 0, y: 1, z: 0 } },
+      { id: 2, position: { x: 10, y: 1, z: 10 } },
+      { id: 3, position: { x: 20, y: 1, z: 20 } },
+    ]
+    // All 3 are far apart — should not trigger scatter centered at (0,1,0)
+    expect(dm.shouldGroupScatter({ x: 0, y: 1, z: 0 }, farAgents)).toBe(false)
+  })
+})
+
 describe('Spatial Hash', () => {
   it('insert and query find agents within radius', () => {
     const sh = new SpatialHash(4)
