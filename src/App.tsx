@@ -1,15 +1,15 @@
 import { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react'
-import { TopBar } from './components/TopBar.tsx'
-import { MetricsDashboard } from './views/MetricsDashboard.tsx'
-import { AcceptanceChecklist } from './components/AcceptanceChecklist.tsx'
-import { ErrorBoundary } from './components/ErrorBoundary.tsx'
-import { EventToastContainer } from './components/EventToast.tsx'
-import { FPSCounter } from './components/FPSCounter.tsx'
-import { HelpModal } from './components/HelpModal.tsx'
-import { SaveLoadPanel } from './components/SaveLoadPanel.tsx'
-import { useSimulationStore } from './store/simulation-store.ts'
-import { useToastStore } from './store/toast-store.ts'
-import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.ts'
+import { TopBar } from './colony/components/TopBar.tsx'
+import { MetricsDashboard } from './colony/views/MetricsDashboard.tsx'
+import { AcceptanceChecklist } from './colony/components/AcceptanceChecklist.tsx'
+import { ErrorBoundary } from './colony/components/ErrorBoundary.tsx'
+import { EventToastContainer } from './colony/components/EventToast.tsx'
+import { FPSCounter } from './colony/components/FPSCounter.tsx'
+import { HelpModal } from './colony/components/HelpModal.tsx'
+import { SaveLoadPanel } from './colony/components/SaveLoadPanel.tsx'
+import { useSimulationStore } from './colony/store/simulation-store.ts'
+import { useToastStore } from './colony/store/toast-store.ts'
+import { useKeyboardShortcuts } from './colony/hooks/useKeyboardShortcuts.ts'
 import './App.css'
 
 /** Retry a dynamic import once on failure (handles stale chunk 404s after redeploy) */
@@ -33,9 +33,9 @@ function lazyRetry<T extends Record<string, unknown>>(
   )
 }
 
-const SimulationView = lazyRetry(() => import('./views/SimulationView.tsx'), m => ({ default: m.SimulationView }))
-const ResultsSummary = lazyRetry(() => import('./views/ResultsSummary.tsx'), m => ({ default: m.ResultsSummary }))
-const SetupScreen = lazyRetry(() => import('./views/SetupScreen.tsx'), m => ({ default: m.SetupScreen }))
+const SimulationView = lazyRetry(() => import('./colony/views/SimulationView.tsx'), m => ({ default: m.SimulationView }))
+const ResultsSummary = lazyRetry(() => import('./colony/views/ResultsSummary.tsx'), m => ({ default: m.ResultsSummary }))
+const SetupScreen = lazyRetry(() => import('./colony/views/SetupScreen.tsx'), m => ({ default: m.SetupScreen }))
 const VoxelSandbox = lazyRetry(() => import('./voxel/views/VoxelSandbox.tsx'), m => ({ default: m.VoxelSandbox }))
 const ComparisonView = lazyRetry(() => import('./voxel/views/ComparisonView.tsx'), m => ({ default: m.ComparisonView }))
 
