@@ -2,6 +2,7 @@ import type { Agent } from './agent.ts'
 import type { VoxelCoord } from '../pathfinding/types.ts'
 import { voxelEquals, voxelKey, manhattanDistance3D } from '../pathfinding/types.ts'
 import type { IPathfinder, IPathSmoother } from '../pathfinding/pathfinder-interface.ts'
+import { HybridHandle } from '../pathfinding/hybrid-handle.ts'
 import { hasGroundBelow, findGroundBelow, LANDING_PAUSE_TICKS } from '../world/gravity.ts'
 import type { VoxelGrid } from '../world/voxel-grid.ts'
 import { isWalkable } from '../pathfinding/movement-rules.ts'
@@ -48,8 +49,8 @@ export class AgentManager {
     if (this.congestionStrategy === 'density') return true
     if (this.congestionStrategy === 'reservation') return false
     // Hybrid: check if agent's handle is on a flow field segment
-    if (agent.navigationHandle && 'getActiveSubType' in agent.navigationHandle) {
-      return (agent.navigationHandle as any).getActiveSubType() === 'flowfield'
+    if (agent.navigationHandle instanceof HybridHandle) {
+      return agent.navigationHandle.getActiveSubType() === 'flowfield'
     }
     return false
   }

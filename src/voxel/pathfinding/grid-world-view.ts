@@ -9,6 +9,10 @@ import type { VoxelWorldView } from './voxel-world-view.ts'
 export class GridWorldView implements VoxelWorldView {
   constructor(private grid: VoxelGrid) {}
 
+  getGrid(): VoxelGrid {
+    return this.grid
+  }
+
   isWalkable(pos: VoxelCoord, agentHeight: number): boolean {
     return isWalkable(this.grid, pos, agentHeight)
   }

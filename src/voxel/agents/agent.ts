@@ -16,7 +16,6 @@ export interface Agent {
   pathAge: number
   landingTicksRemaining: number
   waitTicks: number
-  priority: number
 }
 
 let nextAgentId = 1
@@ -35,7 +34,6 @@ export function createAgent(position: VoxelCoord, height: number = 2): Agent {
     pathAge: 0,
     landingTicksRemaining: 0,
     waitTicks: 0,
-    priority: 0,
   }
 }
 

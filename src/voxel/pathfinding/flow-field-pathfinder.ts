@@ -295,7 +295,7 @@ export class FlowFieldPathfinder implements IPathfinder {
     this.agentHeight = agentHeight
     this.cache = new FlowFieldCache(cacheConfig)
     this.layerSystem = buildLayerSystem(
-      (worldView as unknown as { grid: import('../world/voxel-grid.ts').VoxelGrid }).grid,
+      worldView.getGrid(),
       agentHeight,
     )
   }
@@ -303,7 +303,7 @@ export class FlowFieldPathfinder implements IPathfinder {
   /** Rebuild layers after bulk terrain changes */
   rebuildLayers(): void {
     this.layerSystem = buildLayerSystem(
-      (this.worldView as unknown as { grid: import('../world/voxel-grid.ts').VoxelGrid }).grid,
+      this.worldView.getGrid(),
       this.agentHeight,
     )
     this.cache.clear()
@@ -381,13 +381,18 @@ export class FlowFieldPathfinder implements IPathfinder {
 
   invalidateRegion(event: TerrainChangeEvent): void {
     // Rebuild layers for changed voxels
-    const grid = (this.worldView as unknown as { grid: import('../world/voxel-grid.ts').VoxelGrid }).grid
-    const affectedLayers = updateLayerColumns(this.layerSystem, grid, event.changedVoxels, this.agentHeight)
+    const affectedLayers = updateLayerColumns(this.layerSystem, this.worldView.getGrid(), event.changedVoxels, this.agentHeight)
 
-    // Invalidate cached flow fields that cover affected layers
-    // For simplicity, clear all cached fields (optimize later)
+    // Invalidate cached flow fields whose layers overlap the affected set
     if (affectedLayers.size > 0) {
-      this.cache.clear()
+      for (const field of this.cache.getAllFields()) {
+        for (const layerId of field.layers.keys()) {
+          if (affectedLayers.has(layerId)) {
+            this.cache.remove(field.destinationKey)
+            break
+          }
+        }
+      }
     }
 
     // Invalidate handles

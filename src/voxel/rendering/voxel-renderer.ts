@@ -36,6 +36,7 @@ export class VoxelRenderer {
   private pathMaterial: THREE.LineBasicMaterial
   private destMaterial: THREE.MeshLambertMaterial
 
+  private canvas: HTMLCanvasElement
   private raycaster = new THREE.Raycaster()
 
   // Camera orbit state
@@ -49,6 +50,7 @@ export class VoxelRenderer {
   private isRightDrag = false
 
   constructor(canvas: HTMLCanvasElement) {
+    this.canvas = canvas
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
     this.renderer.setPixelRatio(window.devicePixelRatio)
     this.renderer.setClearColor(0x1a1a2e)
@@ -296,6 +298,10 @@ export class VoxelRenderer {
     for (const line of this.pathLines) this.scene.remove(line)
     for (const marker of this.destMarkers) this.scene.remove(marker)
     if (this.gridHelper) this.scene.remove(this.gridHelper)
+    this.canvas.removeEventListener('mousedown', this.onMouseDown)
+    this.canvas.removeEventListener('mousemove', this.onMouseMove)
+    this.canvas.removeEventListener('mouseup', this.onMouseUp)
+    this.canvas.removeEventListener('wheel', this.onWheel)
     this.renderer.dispose()
   }
 }

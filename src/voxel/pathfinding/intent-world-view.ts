@@ -7,6 +7,7 @@
  */
 
 import type { BlockType } from '../world/block-types.ts'
+import type { VoxelGrid } from '../world/voxel-grid.ts'
 import type { VoxelCoord } from './types.ts'
 import type { Neighbor } from './movement-rules.ts'
 import type { VoxelWorldView } from './voxel-world-view.ts'
@@ -43,5 +44,9 @@ export class IntentWorldView implements VoxelWorldView {
       }
     }
     return neighbors
+  }
+
+  getGrid(): VoxelGrid {
+    return this.inner.getGrid()
   }
 }

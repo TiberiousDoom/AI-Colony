@@ -236,7 +236,7 @@ class DStarLiteHandle implements NavigationHandle {
       }
     }
 
-    this.km += manhattanDistance3D(this.sStart, this.sStart) // km stays same if agent hasn't moved
+    // km is updated by updateStart() when agent moves — no extra update needed here
 
     for (const key of affected) {
       const parts = key.split(',')

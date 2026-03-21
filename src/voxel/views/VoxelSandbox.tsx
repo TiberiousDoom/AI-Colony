@@ -36,10 +36,11 @@ export function VoxelSandbox() {
   const assignAgentDestination = useVoxelStore(s => s.assignAgentDestination)
   const editTerrain = useVoxelStore(s => s.editTerrain)
 
-  // Initialize engine on mount
+  // Initialize engine on mount, stop simulation on unmount
   useEffect(() => {
     if (!engine) init()
-  }, [engine, init])
+    return () => { pause() }
+  }, [engine, init, pause])
 
   // Initialize renderer
   useEffect(() => {

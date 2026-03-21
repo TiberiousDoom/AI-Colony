@@ -157,6 +157,13 @@ function runAStarSearch(
 
     const current = open.pop()!
     const ck = voxelKey(current.pos)
+
+    // Skip stale entries (lazy deletion: node was re-pushed with better priority)
+    if (closed.has(ck)) continue
+    // Skip if this is an outdated heap entry (a newer version exists with lower g)
+    const latest = openSet.get(ck)
+    if (latest && latest !== current && latest.g < current.g) continue
+
     openSet.delete(ck)
 
     if (voxelEquals(current.pos, destination)) {
@@ -188,7 +195,9 @@ function runAStarSearch(
         existing.g = ng
         existing.f = ng + manhattanDistance3D(neighbor.coord, destination)
         existing.parent = current
-        // Note: heap doesn't re-sort, but A* still correct (may explore suboptimally)
+        // Re-push with updated priority (lazy deletion — stale entries skipped on pop)
+        const tiebreak = existing.f + (neighbor.coord.x * 0.00001 + neighbor.coord.y * 0.0000001 + neighbor.coord.z * 0.000000001)
+        open.push(existing, tiebreak)
       } else {
         const nf = ng + manhattanDistance3D(neighbor.coord, destination)
         const node: AStarNode = { pos: neighbor.coord, g: ng, f: nf, parent: current }
