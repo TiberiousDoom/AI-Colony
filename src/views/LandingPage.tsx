@@ -16,13 +16,12 @@ const cards = [
   },
   {
     id: 'voxel' as const,
-    title: 'Voxel SIM',
-    subtitle: 'Shovel Monster 3D',
-    description: 'A 3D voxel-based NPC simulation with survival mechanics, combat AI, and task management. NPCs fight, flee, build, and craft in a procedural world.',
+    title: 'Voxel Pathfinding',
+    subtitle: 'Navigation Sandbox',
+    description: '3D voxel pathfinding testbed. Five algorithms run side-by-side on dynamic terrain — blocks mined and placed in real time. R&D pipeline for Shovel Monster NPC navigation.',
     icon: '🧊',
     accent: '#10b981',
-    tags: ['Unity / C#', 'NPC AI', '3D Voxel World'],
-    comingSoon: true,
+    tags: ['Three.js', '5 Algorithms', 'Dynamic Terrain'],
   },
 ] as const
 
@@ -67,54 +66,34 @@ export function LandingPage({ onSelect }: LandingPageProps) {
       }}>
         {cards.map(card => {
           const isHovered = hovered === card.id
-          const disabled = 'comingSoon' in card && card.comingSoon
 
           return (
             <button
               key={card.id}
-              onClick={() => !disabled && onSelect(card.id)}
+              onClick={() => onSelect(card.id)}
               onMouseEnter={() => setHovered(card.id)}
               onMouseLeave={() => setHovered(null)}
               style={{
                 flex: '1 1 340px',
                 maxWidth: '420px',
-                background: isHovered && !disabled
+                background: isHovered
                   ? `linear-gradient(135deg, ${card.accent}15, ${card.accent}08)`
                   : '#1e293b',
-                border: `2px solid ${isHovered && !disabled ? card.accent : '#334155'}`,
+                border: `2px solid ${isHovered ? card.accent : '#334155'}`,
                 borderRadius: '16px',
                 padding: '2rem',
-                cursor: disabled ? 'default' : 'pointer',
+                cursor: 'pointer',
                 textAlign: 'left',
                 color: '#e2e8f0',
                 transition: 'all 0.2s ease',
-                transform: isHovered && !disabled ? 'translateY(-4px)' : 'none',
-                boxShadow: isHovered && !disabled
+                transform: isHovered ? 'translateY(-4px)' : 'none',
+                boxShadow: isHovered
                   ? `0 12px 40px ${card.accent}20`
                   : '0 4px 12px rgba(0,0,0,0.3)',
-                opacity: disabled ? 0.6 : 1,
                 position: 'relative',
                 overflow: 'hidden',
               }}
             >
-              {disabled && (
-                <span style={{
-                  position: 'absolute',
-                  top: '1rem',
-                  right: '1rem',
-                  background: '#475569',
-                  color: '#cbd5e1',
-                  fontSize: '0.7rem',
-                  fontWeight: 600,
-                  padding: '0.2rem 0.6rem',
-                  borderRadius: '999px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                }}>
-                  Coming Soon
-                </span>
-              )}
-
               <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>
                 {card.icon}
               </div>
@@ -123,7 +102,7 @@ export function LandingPage({ onSelect }: LandingPageProps) {
                 fontSize: '1.5rem',
                 fontWeight: 700,
                 marginBottom: '0.25rem',
-                color: isHovered && !disabled ? card.accent : '#f1f5f9',
+                color: isHovered ? card.accent : '#f1f5f9',
                 transition: 'color 0.2s ease',
               }}>
                 {card.title}
