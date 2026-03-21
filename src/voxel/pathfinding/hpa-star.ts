@@ -485,6 +485,7 @@ export class HPAStarPathfinder implements IPathfinder {
     }
 
     if (!this.worldView.isWalkable(start, agentHeight)) return null
+    if (!this.worldView.isWalkable(destination, agentHeight)) return null
 
     // Insert temp nodes for start and dest
     const startKey = this.coarseGraph.insertTempNode(this.worldView, start, agentHeight)

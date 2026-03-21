@@ -388,6 +388,9 @@ export class DStarLitePathfinder implements IPathfinder {
     if (!this.worldView.isWalkable(start, agentHeight)) {
       return null
     }
+    if (!this.worldView.isWalkable(destination, agentHeight)) {
+      return null
+    }
 
     const scopeChunks = this.fullGridMode ? null : chunkScopeKeys(start, destination)
     const handle = new DStarLiteHandle(start, destination, agentId, this.worldView, agentHeight, scopeChunks)

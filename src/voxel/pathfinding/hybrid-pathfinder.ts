@@ -123,6 +123,7 @@ export class HybridPathfinder implements IPathfinder {
     }
 
     if (!this.worldView.isWalkable(start, agentHeight)) return null
+    if (!this.worldView.isWalkable(destination, agentHeight)) return null
 
     // Compute chessboard chunk distance
     const startChunk = worldToChunk(start)

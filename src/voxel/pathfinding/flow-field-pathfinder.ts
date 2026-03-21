@@ -326,6 +326,7 @@ export class FlowFieldPathfinder implements IPathfinder {
     }
 
     if (!this.worldView.isWalkable(start, agentHeight)) return null
+    if (!this.worldView.isWalkable(destination, agentHeight)) return null
 
     const startLayer = getLayerAt(this.layerSystem, start.x, start.z, start.y)
     const destLayer = getLayerAt(this.layerSystem, destination.x, destination.z, destination.y)

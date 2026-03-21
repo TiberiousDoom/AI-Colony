@@ -260,6 +260,9 @@ export class GridAStarPathfinder implements IPathfinder {
     if (!this.worldView.isWalkable(start, agentHeight)) {
       return null
     }
+    if (!this.worldView.isWalkable(destination, agentHeight)) {
+      return null
+    }
 
     const startNode: AStarNode = {
       pos: start,
