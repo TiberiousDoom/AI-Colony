@@ -13,6 +13,7 @@ export class GridWorldView implements VoxelWorldView {
     return this.grid
   }
 
+
   isWalkable(pos: VoxelCoord, agentHeight: number): boolean {
     return isWalkable(this.grid, pos, agentHeight)
   }

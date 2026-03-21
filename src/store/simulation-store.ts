@@ -27,11 +27,13 @@ interface SimulationStore {
   /** World seed */
   seed: number
   /** Current view mode */
-  viewMode: 'metrics' | 'simulation' | 'results'
+  viewMode: 'metrics' | 'simulation' | 'results' | 'voxel' | 'compare'
   /** Game configuration */
   gameConfig: GameConfig
   /** Whether to show the setup screen */
   showSetup: boolean
+  /** True when launched via ?mode=voxel — hides colony UI */
+  voxelOnly: boolean
 
   // Actions
   init: (seed: number) => void
@@ -40,7 +42,7 @@ interface SimulationStore {
   reset: () => void
   setSpeed: (speed: number) => void
   setSeed: (seed: number) => void
-  setViewMode: (mode: 'metrics' | 'simulation' | 'results') => void
+  setViewMode: (mode: 'metrics' | 'simulation' | 'results' | 'voxel' | 'compare') => void
   setGameConfig: (config: GameConfig) => void
   startWithConfig: (config: GameConfig) => void
   showSetupScreen: () => void
@@ -128,15 +130,17 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
   })
 
   const defaultConfig = getDefaultGameConfig()
+  const voxelOnly = new URLSearchParams(window.location.search).get('mode') === 'voxel'
 
   return {
     competitionState: null,
     isRunning: false,
     speed: 1,
     seed: defaultConfig.seed,
-    viewMode: 'metrics' as const,
+    viewMode: voxelOnly ? 'voxel' as const : 'metrics' as const,
     gameConfig: defaultConfig,
-    showSetup: true,
+    showSetup: !voxelOnly,
+    voxelOnly,
 
     init(seed: number) {
       const store = get()
@@ -181,7 +185,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
       set({ seed })
     },
 
-    setViewMode(mode: 'metrics' | 'simulation' | 'results') {
+    setViewMode(mode: 'metrics' | 'simulation' | 'results' | 'voxel' | 'compare') {
       set({ viewMode: mode })
     },
 

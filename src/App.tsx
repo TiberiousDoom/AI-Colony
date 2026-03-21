@@ -36,6 +36,8 @@ function lazyRetry<T extends Record<string, unknown>>(
 const SimulationView = lazyRetry(() => import('./views/SimulationView.tsx'), m => ({ default: m.SimulationView }))
 const ResultsSummary = lazyRetry(() => import('./views/ResultsSummary.tsx'), m => ({ default: m.ResultsSummary }))
 const SetupScreen = lazyRetry(() => import('./views/SetupScreen.tsx'), m => ({ default: m.SetupScreen }))
+const VoxelSandbox = lazyRetry(() => import('./voxel/views/VoxelSandbox.tsx'), m => ({ default: m.VoxelSandbox }))
+const ComparisonView = lazyRetry(() => import('./voxel/views/ComparisonView.tsx'), m => ({ default: m.ComparisonView }))
 
 function App() {
   const [showChecklist, setShowChecklist] = useState(false)
@@ -44,6 +46,7 @@ function App() {
   const [showSaveLoad, setShowSaveLoad] = useState(false)
   const viewMode = useSimulationStore(s => s.viewMode)
   const showSetup = useSimulationStore(s => s.showSetup)
+  const voxelOnly = useSimulationStore(s => s.voxelOnly)
   const competitionState = useSimulationStore(s => s.competitionState)
 
   // Emit toasts for new global events
@@ -97,10 +100,27 @@ function App() {
       <TopBar
         onToggleChecklist={() => setShowChecklist(v => !v)}
         onToggleSaveLoad={() => setShowSaveLoad(v => !v)}
+        voxelOnly={voxelOnly}
       />
       <ErrorBoundary>
         <main className="app-main">
-          {viewMode === 'metrics' ? (
+          {viewMode === 'compare' ? (
+            <Suspense fallback={
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8' }}>
+                Loading comparison view...
+              </div>
+            }>
+              <ComparisonView />
+            </Suspense>
+          ) : viewMode === 'voxel' ? (
+            <Suspense fallback={
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8' }}>
+                Loading voxel sandbox...
+              </div>
+            }>
+              <VoxelSandbox />
+            </Suspense>
+          ) : viewMode === 'metrics' ? (
             <MetricsDashboard />
           ) : viewMode === 'results' ? (
             <Suspense fallback={
@@ -121,11 +141,11 @@ function App() {
           )}
         </main>
       </ErrorBoundary>
-      <EventToastContainer />
+      {!voxelOnly && <EventToastContainer />}
       {showFPS && <FPSCounter />}
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
-      {showSaveLoad && <SaveLoadPanel onClose={() => setShowSaveLoad(false)} />}
-      {showChecklist && (
+      {!voxelOnly && showSaveLoad && <SaveLoadPanel onClose={() => setShowSaveLoad(false)} />}
+      {!voxelOnly && showChecklist && (
         <ErrorBoundary>
           <AcceptanceChecklist onClose={() => setShowChecklist(false)} />
         </ErrorBoundary>
