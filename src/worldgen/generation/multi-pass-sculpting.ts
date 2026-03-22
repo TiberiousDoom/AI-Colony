@@ -19,7 +19,7 @@ export class MultiPassSculptingGenerator implements IWorldGenerator {
   getDefaultParams(): Record<string, number> {
     return {
       continentFreq: 0.008, continentAmp: 15, ridgeFreq: 0.03, ridgeAmp: 12,
-      baseHeight: 30, octaves: 4, wormCount: 10, wormSteps: 150,
+      baseHeight: 30, octaves: 4, wormCount: 8, wormSteps: 100,
     }
   }
 
@@ -71,7 +71,7 @@ export class MultiPassSculptingGenerator implements IWorldGenerator {
     timing.biomesMs = performance.now() - biomeStart
 
     const caveStart = performance.now()
-    carveAgentWorms(grid, heightMap, rng.fork(), params.wormCount, params.wormSteps)
+    carveAgentWorms(grid, heightMap, rng.fork(), params.wormCount, params.wormSteps, 1)
     timing.cavesMs = performance.now() - caveStart
 
     const oreStart = performance.now()

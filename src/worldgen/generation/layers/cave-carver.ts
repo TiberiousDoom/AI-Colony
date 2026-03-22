@@ -24,7 +24,7 @@ export function carveNoiseThreshold(
   for (let x = 0; x < worldWidth; x++) {
     for (let z = 0; z < worldDepth; z++) {
       const surfaceY = Math.floor(heightMap[x * worldDepth + z])
-      for (let y = 1; y < surfaceY - 2; y++) {
+      for (let y = 2; y < surfaceY - 2; y++) {
         const block = grid.getBlock({ x, y, z })
         if (block === WorldgenBlockType.Bedrock || block === WorldgenBlockType.Air) continue
 
@@ -49,7 +49,7 @@ export function carveSpaghetti(
   grid: WorldgenGrid,
   heightMap: Float32Array,
   rng: SeededRNG,
-  threshold: number = 0.03,
+  threshold: number = 0.06,
   frequency: number = 0.05,
 ): number {
   const noiseA = createNoise3D(rng)
@@ -60,7 +60,7 @@ export function carveSpaghetti(
   for (let x = 0; x < worldWidth; x++) {
     for (let z = 0; z < worldDepth; z++) {
       const surfaceY = Math.floor(heightMap[x * worldDepth + z])
-      for (let y = 1; y < surfaceY - 2; y++) {
+      for (let y = 2; y < surfaceY - 2; y++) {
         const block = grid.getBlock({ x, y, z })
         if (block === WorldgenBlockType.Bedrock || block === WorldgenBlockType.Air) continue
 
@@ -81,17 +81,17 @@ export function carveSpaghetti(
 
 /**
  * Method C: Agent worm caves.
- * Random-walk agents starting at random underground points,
- * carving spheres along their path with branching probability.
+ * Random-walk agents carving tunnels with controlled radius.
+ * Starts mid-depth, avoids bedrock zone, limits branching.
  */
 export function carveAgentWorms(
   grid: WorldgenGrid,
   heightMap: Float32Array,
   rng: SeededRNG,
-  wormCount: number = 15,
-  maxSteps: number = 200,
+  wormCount: number = 10,
+  maxSteps: number = 150,
   radius: number = 2,
-  branchChance: number = 0.05,
+  branchChance: number = 0.04,
 ): number {
   const { worldWidth, worldHeight, worldDepth } = grid
   let carved = 0
@@ -107,11 +107,13 @@ export function carveAgentWorms(
     const wx = rng.nextInt(10, worldWidth - 10)
     const wz = rng.nextInt(10, worldDepth - 10)
     const surfaceY = Math.floor(heightMap[wx * worldDepth + wz])
-    const wy = rng.nextInt(3, Math.max(4, surfaceY - 5))
+    // Start in the middle third of the terrain, not near bedrock
+    const minY = Math.max(5, Math.floor(surfaceY * 0.25))
+    const maxY = Math.max(minY + 2, Math.floor(surfaceY * 0.75))
+    const wy = rng.nextInt(minY, maxY)
 
-    // Random initial direction
     const angle = rng.nextFloat(0, Math.PI * 2)
-    const pitch = rng.nextFloat(-0.3, 0.3)
+    const pitch = rng.nextFloat(-0.2, 0.2)
     worms.push({
       x: wx, y: wy, z: wz,
       dx: Math.cos(angle) * Math.cos(pitch),
@@ -128,23 +130,22 @@ export function carveAgentWorms(
       continue
     }
 
-    // Carve a sphere at current position
     const cx = Math.round(worm.x)
     const cy = Math.round(worm.y)
     const cz = Math.round(worm.z)
-    const r = Math.max(1, radius + (rng.next() < 0.3 ? 1 : 0))
 
-    for (let dx = -r; dx <= r; dx++) {
-      for (let dy = -r; dy <= r; dy++) {
-        for (let dz = -r; dz <= r; dz++) {
-          if (dx * dx + dy * dy + dz * dz > r * r) continue
+    // Carve a sphere — fixed radius (no random inflation)
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dz = -radius; dz <= radius; dz++) {
+          if (dx * dx + dy * dy + dz * dz > radius * radius) continue
           const bx = cx + dx, by = cy + dy, bz = cz + dz
+          if (by <= 1) continue // Protect bedrock + 1 buffer
           if (!grid.isInBounds({ x: bx, y: by, z: bz })) continue
-          if (by <= 0) continue // Don't carve bedrock layer
-          const surfY = Math.floor(heightMap[Math.min(worldWidth - 1, Math.max(0, bx)) * worldDepth + Math.min(worldDepth - 1, Math.max(0, bz))])
-          if (by >= surfY - 1) continue // Don't carve near surface
+          const surfY = heightMap[Math.max(0, Math.min(worldWidth - 1, bx)) * worldDepth + Math.max(0, Math.min(worldDepth - 1, bz))]
+          if (by >= surfY - 1) continue
           const block = grid.getBlock({ x: bx, y: by, z: bz })
-          if (block !== WorldgenBlockType.Air && block !== WorldgenBlockType.Bedrock) {
+          if (block !== WorldgenBlockType.Air && block !== WorldgenBlockType.Bedrock && block !== WorldgenBlockType.Water) {
             grid.setBlock({ x: bx, y: by, z: bz }, WorldgenBlockType.Air)
             carved++
           }
@@ -152,34 +153,35 @@ export function carveAgentWorms(
       }
     }
 
-    // Move worm with slight direction randomization
-    worm.dx += rng.nextFloat(-0.3, 0.3)
-    worm.dy += rng.nextFloat(-0.2, 0.2)
-    worm.dz += rng.nextFloat(-0.3, 0.3)
-    // Normalize direction
+    // Move worm — gentler randomization, no downward bias
+    worm.dx += rng.nextFloat(-0.25, 0.25)
+    worm.dy += rng.nextFloat(-0.15, 0.15)
+    worm.dz += rng.nextFloat(-0.25, 0.25)
     const len = Math.sqrt(worm.dx * worm.dx + worm.dy * worm.dy + worm.dz * worm.dz)
     if (len > 0) {
       worm.dx /= len; worm.dy /= len; worm.dz /= len
     }
-    // Bias slightly downward
-    worm.dy -= 0.05
+    // Gentle bias toward mid-height (prevents piling at bottom or top)
+    const midY = worldHeight * 0.35
+    if (worm.y < midY - 5) worm.dy += 0.02
+    else if (worm.y > midY + 10) worm.dy -= 0.02
 
-    worm.x += worm.dx * 1.5
+    worm.x += worm.dx * 2.0
     worm.y += worm.dy * 1.5
-    worm.z += worm.dz * 1.5
+    worm.z += worm.dz * 2.0
     worm.steps++
 
-    // Clamp to bounds
-    worm.x = Math.max(1, Math.min(worldWidth - 2, worm.x))
-    worm.y = Math.max(2, Math.min(worldHeight - 2, worm.y))
-    worm.z = Math.max(1, Math.min(worldDepth - 2, worm.z))
+    // Clamp — keep away from edges and bedrock
+    worm.x = Math.max(3, Math.min(worldWidth - 4, worm.x))
+    worm.y = Math.max(4, Math.min(worldHeight - 4, worm.y))
+    worm.z = Math.max(3, Math.min(worldDepth - 4, worm.z))
 
-    // Branching
-    if (rng.next() < branchChance && worms.length < 50) {
+    // Branching — reduced max branches
+    if (rng.next() < branchChance && worms.length < 25) {
       const angle = rng.nextFloat(0, Math.PI * 2)
       worms.push({
         x: worm.x, y: worm.y, z: worm.z,
-        dx: Math.cos(angle), dy: rng.nextFloat(-0.2, 0.2), dz: Math.sin(angle),
+        dx: Math.cos(angle), dy: rng.nextFloat(-0.15, 0.15), dz: Math.sin(angle),
         steps: worm.steps,
       })
     }
@@ -190,7 +192,6 @@ export function carveAgentWorms(
 
 /**
  * Method A+B combined: Cheese + Spaghetti (Minecraft-style).
- * Large blobby chambers (cheese) intersected with thin tunnels (spaghetti).
  */
 export function carveCheeseAndSpaghetti(
   grid: WorldgenGrid,
@@ -199,6 +200,6 @@ export function carveCheeseAndSpaghetti(
 ): number {
   let carved = 0
   carved += carveNoiseThreshold(grid, heightMap, rng, 0.55, 0.04, 2)
-  carved += carveSpaghetti(grid, heightMap, rng.fork(), 0.04, 0.06)
+  carved += carveSpaghetti(grid, heightMap, rng.fork(), 0.06, 0.06)
   return carved
 }

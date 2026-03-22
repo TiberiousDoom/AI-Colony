@@ -50,8 +50,8 @@ function findPath(
       const neighborSurf = Math.floor(heightMap[k])
       const dy = neighborSurf - curr.y
 
-      // Can walk flat or step up 1, or drop down any
-      if (dy > 1) continue // Too high to climb
+      // Can walk flat, step up 1-3, or drop down any height
+      if (dy > 3) continue // Too high to climb even with jumping
       if (neighborSurf <= 0) continue
 
       visited.add(k)
@@ -139,7 +139,7 @@ export function analyzeNavigability(
 
         const nh = Math.floor(heightMap[k])
         if (nh <= seaLevel) continue
-        if (nh - curr.y > 1) continue
+        if (nh - curr.y > 3) continue // match pathfinding step limit
 
         visited.add(k)
         const dist = Math.min(255, curr.dist + 1)
@@ -173,7 +173,7 @@ export function analyzeNavigability(
           if (surfaceVisited[ni]) continue
           const nh = Math.floor(heightMap[ni])
           if (nh <= seaLevel) continue
-          if (Math.abs(nh - ch) > 1) continue
+          if (Math.abs(nh - ch) > 3) continue // match pathfinding step limit
           surfaceVisited[ni] = 1
           stack.push(ni)
         }

@@ -21,7 +21,7 @@ export class GrammarHybridGenerator implements IWorldGenerator {
   getDefaultParams(): Record<string, number> {
     return {
       octaves: 4, frequency: 0.02, amplitude: 20, baseHeight: 32,
-      caveThreshold: 0.03, maxExpansions: 8,
+      caveThreshold: 0.06, maxExpansions: 8,
     }
   }
 

@@ -19,7 +19,7 @@ export class DomainWarpingGenerator implements IWorldGenerator {
   getDefaultParams(): Record<string, number> {
     return {
       octaves: 4, frequency: 0.02, amplitude: 20, baseHeight: 32,
-      warpStrength: 30, warpFrequency: 0.01, warpOctaves: 3, caveThreshold: 0.03,
+      warpStrength: 30, warpFrequency: 0.01, warpOctaves: 3, caveThreshold: 0.06,
     }
   }
 

@@ -34,23 +34,23 @@ function lookupBiome(temperature: number, humidity: number, height: number, seaL
   // High elevation always mountains
   if (height > seaLevel + 20) return BiomeType.Mountains
 
-  if (temperature < -0.3) {
+  if (temperature < -0.25) {
     // Cold
     return BiomeType.Tundra
-  } else if (temperature < 0.1) {
+  } else if (temperature < 0.0) {
     // Cool
     if (humidity > 0.0) return BiomeType.Forest
     return BiomeType.Mountains
-  } else if (temperature < 0.5) {
+  } else if (temperature < 0.25) {
     // Warm
-    if (humidity > 0.3) return BiomeType.Swamp
+    if (humidity > 0.25) return BiomeType.Swamp
     if (humidity > -0.1) return BiomeType.Forest
-    if (humidity > -0.4) return BiomeType.Plains
+    if (humidity > -0.3) return BiomeType.Plains
     return BiomeType.Badlands
   } else {
     // Hot
     if (humidity > 0.2) return BiomeType.Swamp
-    if (humidity > -0.2) return BiomeType.Plains
+    if (humidity > -0.1) return BiomeType.Plains
     return BiomeType.Desert
   }
 }
@@ -221,6 +221,7 @@ export function assignBiomesFromTerrain(
   seaLevel: number,
 ): Uint8Array {
   const tempNoise = createNoise2D(rng)
+  const humidNoise = createNoise2D(rng.fork())
   const { worldWidth, worldDepth } = grid
 
   const biomeMap = new Uint8Array(worldWidth * worldDepth)
@@ -240,26 +241,19 @@ export function assignBiomesFromTerrain(
         }
       }
 
-      // Temperature from noise (low freq)
-      const temp = fractalNoise(tempNoise, x * 0.006, z * 0.006, 2, 0.5, 2.0)
+      // Temperature from noise + elevation cooling (higher = colder)
+      const rawTemp = fractalNoise(tempNoise, x * 0.01, z * 0.01, 2, 0.5, 2.0)
+      const elevCooling = Math.max(0, (surfaceY - seaLevel) / 50) * 0.15
+      const temp = rawTemp - elevCooling
+      const humid = fractalNoise(humidNoise, x * 0.008, z * 0.008, 2, 0.5, 2.0)
 
       let biome: BiomeType
-      if (surfaceY > seaLevel + 20) {
+      if (surfaceY > seaLevel + 22 || maxSlope > 6) {
         biome = BiomeType.Mountains
-      } else if (maxSlope > 4) {
-        biome = BiomeType.Mountains
-      } else if (surfaceY < seaLevel + 2 && temp > 0.2) {
+      } else if (surfaceY < seaLevel + 2 && humid > 0.0) {
         biome = BiomeType.Swamp
-      } else if (temp < -0.3) {
-        biome = BiomeType.Tundra
-      } else if (temp > 0.4 && surfaceY > seaLevel + 5) {
-        biome = BiomeType.Badlands
-      } else if (temp > 0.3) {
-        biome = BiomeType.Desert
-      } else if (temp > -0.1) {
-        biome = BiomeType.Forest
       } else {
-        biome = BiomeType.Plains
+        biome = lookupBiome(temp, humid, surfaceY, seaLevel)
       }
 
       biomeMap[idx] = biome
@@ -322,17 +316,17 @@ export function assignBiomesMultiNoise(
       let biome: BiomeType
 
       // Continentalness modulates biome selection
-      if (cont > 0.4 || surfaceY > seaLevel + 18) {
+      if (cont > 0.5 || surfaceY > seaLevel + 20) {
         biome = BiomeType.Mountains
-      } else if (temp < -0.3) {
+      } else if (temp < -0.25) {
         biome = BiomeType.Tundra
-      } else if (temp > 0.5 && humid < -0.1) {
+      } else if (temp > 0.25 && humid < -0.1) {
         biome = BiomeType.Desert
-      } else if (temp > 0.3 && humid < -0.3) {
+      } else if (temp > 0.2 && humid < -0.25) {
         biome = BiomeType.Badlands
-      } else if (humid > 0.3 && temp > 0.1) {
+      } else if (humid > 0.25 && temp > 0.05) {
         biome = BiomeType.Swamp
-      } else if (humid > 0.0 || temp < 0.1) {
+      } else if (humid > -0.05 || temp < 0.05) {
         biome = BiomeType.Forest
       } else {
         biome = BiomeType.Plains
