@@ -25,7 +25,7 @@ export interface TrainingConfig {
   mutationRate: number
   elitePercent: number
   seed: number
-  worldSize: 'small' | 'medium' | 'large'
+  worldSize: 'small' | 'medium' | 'large' | 'xlarge'
   biome: BiomeType
 }
 
@@ -44,6 +44,7 @@ const WORLD_SIZES: Record<string, number> = {
   small: 32,
   medium: 64,
   large: 128,
+  xlarge: 160,
 }
 
 export function getDefaultTrainingConfig(): TrainingConfig {

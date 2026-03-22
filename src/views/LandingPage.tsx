@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 interface LandingPageProps {
-  onSelect: (app: 'colony' | 'voxel') => void
+  onSelect: (app: 'colony' | 'voxel' | 'worldgen') => void
 }
 
 const cards = [
@@ -22,6 +22,15 @@ const cards = [
     icon: '🧊',
     accent: '#10b981',
     tags: ['Three.js', '5 Algorithms', 'Dynamic Terrain'],
+  },
+  {
+    id: 'worldgen' as const,
+    title: 'Voxel World Gen',
+    subtitle: 'Procedural Terrain',
+    description: 'Compare 5 procedural world generation algorithms side-by-side. Layered Perlin, Domain Warping, Multi-Pass Sculpting, Spline-Noise, and Grammar Hybrid — all on the same seed.',
+    icon: '🌍',
+    accent: '#f59e0b',
+    tags: ['Three.js', '5 Algorithms', 'Procedural Terrain'],
   },
 ] as const
 
