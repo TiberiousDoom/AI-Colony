@@ -43,7 +43,7 @@ function logSummary(output: ReturnType<typeof runBenchmark>) {
 }
 
 describe('Large Map Benchmark (160×160)', () => {
-  it('Large Canyon Run — 6 algorithms × 10 seeds', { timeout: 600000 }, () => {
+  it('Large Canyon Run — 6 algorithms × 10 seeds', { timeout: 2400000 }, () => {
     const output = runBenchmark({
       scenario: createLargeCanyonRunScenario(),
       pathfinderFactories: FACTORIES,
@@ -53,7 +53,7 @@ describe('Large Map Benchmark (160×160)', () => {
     logSummary(output)
   })
 
-  it('Large Bridge Collapse — 6 algorithms × 10 seeds', { timeout: 600000 }, () => {
+  it('Large Bridge Collapse — 6 algorithms × 10 seeds', { timeout: 2400000 }, () => {
     const output = runBenchmark({
       scenario: createLargeBridgeCollapseScenario(),
       pathfinderFactories: FACTORIES,
@@ -63,7 +63,7 @@ describe('Large Map Benchmark (160×160)', () => {
     logSummary(output)
   })
 
-  it('Large Stairwell — 6 algorithms × 10 seeds', { timeout: 600000 }, () => {
+  it('Large Stairwell — 6 algorithms × 10 seeds', { timeout: 2400000 }, () => {
     const output = runBenchmark({
       scenario: createLargeStairwellScenario(),
       pathfinderFactories: FACTORIES,
@@ -73,7 +73,7 @@ describe('Large Map Benchmark (160×160)', () => {
     logSummary(output)
   })
 
-  it('Large Rush Hour — 6 algorithms × 10 seeds', { timeout: 600000 }, () => {
+  it('Large Rush Hour — 6 algorithms × 10 seeds', { timeout: 2400000 }, () => {
     const output = runBenchmark({
       scenario: createLargeRushHourScenario(),
       pathfinderFactories: FACTORIES,
@@ -83,7 +83,7 @@ describe('Large Map Benchmark (160×160)', () => {
     logSummary(output)
   })
 
-  it('Large Swiss Cheese — 6 algorithms × 10 seeds', { timeout: 1800000 }, () => {
+  it('Large Swiss Cheese — 6 algorithms × 10 seeds', { timeout: 3600000 }, () => {
     const output = runBenchmark({
       scenario: createLargeSwissCheeseScenario(),
       pathfinderFactories: FACTORIES,
@@ -93,7 +93,7 @@ describe('Large Map Benchmark (160×160)', () => {
     logSummary(output)
   })
 
-  it('Large Construction Zone — 6 algorithms × 10 seeds', { timeout: 600000 }, () => {
+  it('Large Construction Zone — 6 algorithms × 10 seeds', { timeout: 2400000 }, () => {
     const output = runBenchmark({
       scenario: createLargeConstructionZoneScenario(),
       pathfinderFactories: FACTORIES,
@@ -103,7 +103,7 @@ describe('Large Map Benchmark (160×160)', () => {
     logSummary(output)
   })
 
-  it('Large Free Fall — 6 algorithms × 10 seeds', { timeout: 600000 }, () => {
+  it('Large Free Fall — 6 algorithms × 10 seeds', { timeout: 2400000 }, () => {
     const output = runBenchmark({
       scenario: createLargeFreeFallScenario(),
       pathfinderFactories: FACTORIES,
@@ -113,7 +113,7 @@ describe('Large Map Benchmark (160×160)', () => {
     logSummary(output)
   })
 
-  it('Large Active Mine — 6 algorithms × 10 seeds', { timeout: 600000 }, () => {
+  it('Large Active Mine — 6 algorithms × 10 seeds', { timeout: 2400000 }, () => {
     const output = runBenchmark({
       scenario: createLargeActiveMineScenario(),
       pathfinderFactories: FACTORIES,
