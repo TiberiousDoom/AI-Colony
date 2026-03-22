@@ -4,7 +4,7 @@ import { WorldgenRenderer } from '../rendering/worldgen-renderer.ts'
 import { ALL_GENERATORS } from '../generation/registry.ts'
 
 export function WorldView() {
-  const { results, selectedAlgorithms, vizMode, crossSectionY } = useWorldgenStore()
+  const { results, selectedAlgorithms, vizMode, crossSectionY, navResults, analyzeNav } = useWorldgenStore()
   const containerRef = useRef<HTMLDivElement>(null)
   const renderersRef = useRef<Map<string, WorldgenRenderer>>(new Map())
   const canvasesRef = useRef<Map<string, HTMLCanvasElement>>(new Map())
@@ -66,7 +66,12 @@ export function WorldView() {
       renderer.setCrossSectionY(crossSectionY)
       const result = results.get(gen.id)
       if (result) {
-        renderer.rebuildTerrain(result.grid, vizMode, result.biomeMap, result.heightMap)
+        // Lazy-compute navigability if needed
+        if (vizMode === 'navigability' && !navResults.has(gen.id)) {
+          analyzeNav(gen.id)
+        }
+        const nav = navResults.get(gen.id)
+        renderer.rebuildTerrain(result.grid, vizMode, result.biomeMap, result.heightMap, result.spawnPoints, nav?.reachabilityMap)
       }
     }
 
@@ -106,7 +111,7 @@ export function WorldView() {
     return () => {
       cancelAnimationFrame(animFrameRef.current)
     }
-  }, [activeGenerators.length, vizMode, results, crossSectionY])
+  }, [activeGenerators.length, vizMode, results, crossSectionY, navResults])
 
   useEffect(() => {
     return () => {

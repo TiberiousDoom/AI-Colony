@@ -3,8 +3,9 @@ import type { WorldgenGrid } from '../world/worldgen-grid.ts'
 import { WorldgenBlockType, isTransparent } from '../world/block-types.ts'
 import { getBlockColor } from '../world/block-registry.ts'
 import { BiomeType } from '../generation/generator-interface.ts'
+import type { SpawnPoint } from '../generation/layers/spawn-placement.ts'
 
-export type VisualizationMode = 'natural' | 'heightmap' | 'biome' | 'cave' | 'ore' | 'spawn'
+export type VisualizationMode = 'natural' | 'heightmap' | 'biome' | 'cave' | 'ore' | 'spawn' | 'navigability'
 
 const MAX_INSTANCES = 300_000
 
@@ -134,6 +135,8 @@ export class WorldgenRenderer {
     mode: VisualizationMode = 'natural',
     biomeMap?: Uint8Array,
     heightMap?: Float32Array,
+    spawnPoints?: SpawnPoint[],
+    reachabilityMap?: Uint8Array,
   ): void {
     // Remove old meshes
     for (const mesh of this.instancedMeshes.values()) {
@@ -147,8 +150,11 @@ export class WorldgenRenderer {
 
     if (mode === 'cave') {
       this.buildCaveView(grid, worldWidth, worldHeight, worldDepth, cutoffY, heightMap)
+    } else if (mode === 'spawn' && spawnPoints) {
+      this.buildStandardView(grid, worldWidth, worldHeight, worldDepth, cutoffY, 'natural', biomeMap, reachabilityMap)
+      this.addSpawnMarkers(spawnPoints)
     } else {
-      this.buildStandardView(grid, worldWidth, worldHeight, worldDepth, cutoffY, mode, biomeMap)
+      this.buildStandardView(grid, worldWidth, worldHeight, worldDepth, cutoffY, mode, biomeMap, reachabilityMap)
     }
 
     // Grid helper
@@ -168,6 +174,7 @@ export class WorldgenRenderer {
     cutoffY: number,
     mode: VisualizationMode,
     biomeMap?: Uint8Array,
+    reachabilityMap?: Uint8Array,
   ): void {
     // Collect visible blocks
     const blocks: { x: number; y: number; z: number; type: number; biome: number }[] = []
@@ -214,6 +221,23 @@ export class WorldgenRenderer {
       } else if (mode === 'heightmap') {
         const t = b.y / worldHeight
         tmpColor.setRGB(t, t, t)
+      } else if (mode === 'ore') {
+        // Highlight ore blocks, dim everything else
+        const oreTypes = [9, 10, 11, 12, 13, 14] // Coal through Crystal
+        if (oreTypes.includes(b.type)) {
+          tmpColor.set(getBlockColor(b.type as WorldgenBlockType))
+        } else {
+          tmpColor.setRGB(0.15, 0.15, 0.15)
+        }
+      } else if (mode === 'navigability' && reachabilityMap) {
+        const rIdx = b.x * worldDepth + b.z
+        const reach = reachabilityMap[rIdx]
+        if (reach === 0) {
+          tmpColor.setRGB(0.8, 0.1, 0.1) // Red = unreachable
+        } else {
+          const t = Math.min(1, reach / 150)
+          tmpColor.setRGB(t, 1 - t * 0.5, 0.1) // Green -> Yellow
+        }
       } else {
         // Natural
         tmpColor.set(getBlockColor(b.type as WorldgenBlockType))
@@ -297,6 +321,43 @@ export class WorldgenRenderer {
       this.scene.add(mesh)
       this.instancedMeshes.set('caves', mesh)
     }
+  }
+
+  private addSpawnMarkers(spawnPoints: SpawnPoint[]): void {
+    if (spawnPoints.length === 0) return
+    const sphereGeo = new THREE.SphereGeometry(1.5, 8, 8)
+    const matrix = new THREE.Matrix4()
+
+    const rifts = spawnPoints.filter(s => s.type === 'rift')
+    const resources = spawnPoints.filter(s => s.type === 'resource')
+
+    if (rifts.length > 0) {
+      const mat = new THREE.MeshBasicMaterial({ color: 0xff2222, transparent: true, opacity: 0.8 })
+      const mesh = new THREE.InstancedMesh(sphereGeo, mat, rifts.length)
+      for (let i = 0; i < rifts.length; i++) {
+        const p = rifts[i].position
+        matrix.setPosition(p.x, p.y + 2, p.z)
+        mesh.setMatrixAt(i, matrix)
+      }
+      mesh.instanceMatrix.needsUpdate = true
+      this.scene.add(mesh)
+      this.instancedMeshes.set('rifts', mesh)
+    }
+
+    if (resources.length > 0) {
+      const mat = new THREE.MeshBasicMaterial({ color: 0x22ff88, transparent: true, opacity: 0.8 })
+      const mesh = new THREE.InstancedMesh(sphereGeo, mat, resources.length)
+      for (let i = 0; i < resources.length; i++) {
+        const p = resources[i].position
+        matrix.setPosition(p.x, p.y + 2, p.z)
+        mesh.setMatrixAt(i, matrix)
+      }
+      mesh.instanceMatrix.needsUpdate = true
+      this.scene.add(mesh)
+      this.instancedMeshes.set('resources', mesh)
+    }
+
+    sphereGeo.dispose()
   }
 
   private isExposed(grid: WorldgenGrid, x: number, y: number, z: number): boolean {

@@ -3,6 +3,8 @@ import type { GenerationResult } from '../generation/generator-interface.ts'
 import { createDefaultConfig } from '../generation/generator-interface.ts'
 import { ALL_GENERATORS } from '../generation/registry.ts'
 import type { VisualizationMode } from '../rendering/worldgen-renderer.ts'
+import { analyzeNavigability, type NavigabilityResult } from '../analysis/navigability.ts'
+import { createRNG } from '../../shared/seed.ts'
 
 export type WorldgenView = 'dashboard' | 'world' | 'tuner'
 
@@ -13,6 +15,7 @@ interface WorldgenStore {
   activeView: WorldgenView
   vizMode: VisualizationMode
   crossSectionY: number // -1 = disabled
+  navResults: Map<string, NavigabilityResult>
   paramOverrides: Record<string, Record<string, number>>
   isGenerating: boolean
 
@@ -25,6 +28,7 @@ interface WorldgenStore {
   setParam: (algorithmId: string, param: string, value: number) => void
   generateAll: () => void
   generateOne: (algorithmId: string) => void
+  analyzeNav: (algorithmId: string) => void
 }
 
 export const useWorldgenStore = create<WorldgenStore>((set, get) => ({
@@ -34,6 +38,7 @@ export const useWorldgenStore = create<WorldgenStore>((set, get) => ({
   activeView: 'dashboard',
   vizMode: 'natural',
   crossSectionY: -1,
+  navResults: new Map(),
   paramOverrides: {},
   isGenerating: false,
 
@@ -89,7 +94,7 @@ export const useWorldgenStore = create<WorldgenStore>((set, get) => ({
       results.set(gen.id, result)
     }
 
-    set({ results, isGenerating: false })
+    set({ results, navResults: new Map(), isGenerating: false })
   },
 
   generateOne(algorithmId: string) {
@@ -104,5 +109,16 @@ export const useWorldgenStore = create<WorldgenStore>((set, get) => ({
     const newResults = new Map(results)
     newResults.set(algorithmId, result)
     set({ results: newResults })
+  },
+
+  analyzeNav(algorithmId: string) {
+    const { results, navResults, seed } = get()
+    const result = results.get(algorithmId)
+    if (!result) return
+    const rng = createRNG(seed + 9999)
+    const nav = analyzeNavigability(result.grid, result.heightMap, rng, 32)
+    const newNav = new Map(navResults)
+    newNav.set(algorithmId, nav)
+    set({ navResults: newNav })
   },
 }))

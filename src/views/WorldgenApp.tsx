@@ -16,6 +16,9 @@ const VIZ_MODES: { id: VisualizationMode; label: string }[] = [
   { id: 'heightmap', label: 'Height Map' },
   { id: 'biome', label: 'Biome Map' },
   { id: 'cave', label: 'Cave View' },
+  { id: 'ore', label: 'Ore Map' },
+  { id: 'spawn', label: 'Spawn Points' },
+  { id: 'navigability', label: 'Navigability' },
 ]
 
 function WorldgenApp({ onBack }: WorldgenAppProps) {

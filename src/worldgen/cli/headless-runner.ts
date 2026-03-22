@@ -7,6 +7,8 @@
 import { ALL_GENERATORS } from '../generation/registry.ts'
 import { createDefaultConfig, type GenerationResult, type IWorldGenerator, BiomeType } from '../generation/generator-interface.ts'
 import { WorldgenBlockType } from '../world/block-types.ts'
+import { analyzeNavigability } from '../analysis/navigability.ts'
+import { createRNG as createAnalysisRNG } from '../../shared/seed.ts'
 
 const BIOME_NAMES: Record<number, string> = {
   [BiomeType.Plains]: 'Plains',
@@ -202,6 +204,39 @@ function printResults(results: Map<string, GenerationResult>, generators: IWorld
   console.log(formatTable(biomeHeaders, biomeRows))
 
   // Height distribution histogram (text-based)
+  // Navigability analysis
+  console.log('\n--- Navigability Analysis ---')
+  const navHeaders = ['Algorithm', 'Success Rate', 'Path Ratio', 'Regions', 'Score']
+  const navRows = generators.map(gen => {
+    const r = results.get(gen.id)
+    if (!r) return [gen.name, '-', '-', '-', '-']
+    const rng = createAnalysisRNG(42 + 9999)
+    const nav = analyzeNavigability(r.grid, r.heightMap, rng, 32, 20)
+    return [
+      gen.name,
+      `${(nav.successRate * 100).toFixed(0)}%`,
+      nav.avgPathRatio.toFixed(2),
+      String(nav.isolatedRegionCount),
+      nav.navigabilityScore.toFixed(3),
+    ]
+  })
+  console.log(formatTable(navHeaders, navRows))
+
+  // Spawn point summary
+  console.log('\n--- Spawn Points ---')
+  const spawnHeaders = ['Algorithm', 'Rifts', 'Resources', 'Total', 'Avg Difficulty']
+  const spawnRows = generators.map(gen => {
+    const r = results.get(gen.id)
+    if (!r) return [gen.name, '-', '-', '-', '-']
+    const rifts = r.spawnPoints.filter(s => s.type === 'rift')
+    const resources = r.spawnPoints.filter(s => s.type === 'resource')
+    const avgDiff = r.spawnPoints.length > 0
+      ? (r.spawnPoints.reduce((s, p) => s + p.difficulty, 0) / r.spawnPoints.length).toFixed(2)
+      : '-'
+    return [gen.name, String(rifts.length), String(resources.length), String(r.spawnPoints.length), avgDiff]
+  })
+  console.log(formatTable(spawnHeaders, spawnRows))
+
   console.log('\n--- Height Distribution (histogram) ---')
   for (const gen of generators) {
     const r = results.get(gen.id)
