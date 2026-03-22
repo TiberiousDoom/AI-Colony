@@ -4,6 +4,7 @@ import { WorldgenGrid } from '../world/worldgen-grid.ts'
 import { generateTerrainShape } from './layers/terrain-shape.ts'
 import { carveNoiseThreshold } from './layers/cave-carver.ts'
 import { assignBiomes } from './layers/biome-assignment.ts'
+import { generateWaterFeatures } from './layers/water-features.ts'
 import { placeOres } from './layers/ore-placement.ts'
 import { decorateSurface } from './layers/surface-decoration.ts'
 import { placeSpawnPoints } from './layers/spawn-placement.ts'
@@ -56,6 +57,10 @@ export class LayeredPerlinGenerator implements IWorldGenerator {
     const caveStart = performance.now()
     carveNoiseThreshold(grid, heightMap, rng.fork(), params.caveThreshold, params.caveFrequency)
     timing.cavesMs = performance.now() - caveStart
+
+    const waterStart = performance.now()
+    generateWaterFeatures(grid, heightMap, biomeMap, rng.fork(), config.seaLevel)
+    timing.waterMs = performance.now() - waterStart
 
     const oreStart = performance.now()
     placeOres(grid, heightMap, rng.fork())

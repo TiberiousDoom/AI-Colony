@@ -90,10 +90,10 @@ function printResults(results: Map<string, GenerationResult>, generators: IWorld
 
   // Timing table
   console.log('\n--- Generation Timing ---')
-  const timingHeaders = ['Algorithm', 'Total', 'Terrain', 'Biomes', 'Caves', 'Ores', 'Decoration', 'Spawns']
+  const timingHeaders = ['Algorithm', 'Total', 'Terrain', 'Biomes', 'Caves', 'Water', 'Ores', 'Decoration', 'Spawns']
   const timingRows = generators.map(gen => {
     const r = results.get(gen.id)
-    if (!r) return [gen.name, '-', '-', '-', '-', '-', '-', '-']
+    if (!r) return [gen.name, '-', '-', '-', '-', '-', '-', '-', '-']
     const t = r.timing
     return [
       gen.name,
@@ -101,6 +101,7 @@ function printResults(results: Map<string, GenerationResult>, generators: IWorld
       `${t.terrainMs.toFixed(0)}ms`,
       `${t.biomesMs.toFixed(0)}ms`,
       `${t.cavesMs.toFixed(0)}ms`,
+      `${t.waterMs.toFixed(0)}ms`,
       `${t.oresMs.toFixed(0)}ms`,
       `${t.decorationMs.toFixed(0)}ms`,
       `${t.spawnsMs.toFixed(0)}ms`,

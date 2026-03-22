@@ -25,6 +25,7 @@ export interface GenerationTiming {
   terrainMs: number
   biomesMs: number
   cavesMs: number
+  waterMs: number
   oresMs: number
   decorationMs: number
   spawnsMs: number
@@ -79,6 +80,7 @@ export function createEmptyTiming(): GenerationTiming {
     terrainMs: 0,
     biomesMs: 0,
     cavesMs: 0,
+    waterMs: 0,
     oresMs: 0,
     decorationMs: 0,
     spawnsMs: 0,

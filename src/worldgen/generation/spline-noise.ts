@@ -5,6 +5,7 @@ import { WorldgenBlockType } from '../world/block-types.ts'
 import { evaluateSpline, createDefaultHeightSpline } from '../utils/spline.ts'
 import { carveCheeseAndSpaghetti } from './layers/cave-carver.ts'
 import { assignBiomesMultiNoise } from './layers/biome-assignment.ts'
+import { generateWaterFeatures } from './layers/water-features.ts'
 import { placeOres } from './layers/ore-placement.ts'
 import { decorateSurface } from './layers/surface-decoration.ts'
 import { placeSpawnPoints } from './layers/spawn-placement.ts'
@@ -80,6 +81,10 @@ export class SplineNoiseGenerator implements IWorldGenerator {
     const caveStart = performance.now()
     carveCheeseAndSpaghetti(grid, heightMap, rng.fork())
     timing.cavesMs = performance.now() - caveStart
+
+    const waterStart = performance.now()
+    generateWaterFeatures(grid, heightMap, biomeMap, rng.fork(), config.seaLevel)
+    timing.waterMs = performance.now() - waterStart
 
     const oreStart = performance.now()
     placeOres(grid, heightMap, rng.fork())

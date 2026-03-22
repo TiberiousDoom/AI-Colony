@@ -4,6 +4,7 @@ import { WorldgenGrid } from '../world/worldgen-grid.ts'
 import { WorldgenBlockType } from '../world/block-types.ts'
 import { carveAgentWorms } from './layers/cave-carver.ts'
 import { assignBiomesFromTerrain } from './layers/biome-assignment.ts'
+import { generateWaterFeatures } from './layers/water-features.ts'
 import { placeOres } from './layers/ore-placement.ts'
 import { decorateSurface } from './layers/surface-decoration.ts'
 import { placeSpawnPoints } from './layers/spawn-placement.ts'
@@ -73,6 +74,10 @@ export class MultiPassSculptingGenerator implements IWorldGenerator {
     const caveStart = performance.now()
     carveAgentWorms(grid, heightMap, rng.fork(), params.wormCount, params.wormSteps, 1)
     timing.cavesMs = performance.now() - caveStart
+
+    const waterStart = performance.now()
+    generateWaterFeatures(grid, heightMap, biomeMap, rng.fork(), config.seaLevel)
+    timing.waterMs = performance.now() - waterStart
 
     const oreStart = performance.now()
     placeOres(grid, heightMap, rng.fork())
