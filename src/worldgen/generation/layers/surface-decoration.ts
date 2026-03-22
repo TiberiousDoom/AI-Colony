@@ -68,11 +68,16 @@ export function decorateSurface(
           break
         }
         case BiomeType.Desert: {
-          // Cacti: ~1.5%, min spacing 4
-          if (rng.next() < 0.015 && isSpaceFree(x, z, 4)) {
+          // Cacti: ~4%, min spacing 2
+          if (rng.next() < 0.04 && isSpaceFree(x, z, 2)) {
             placeCactus(grid, x, surfY, z, rng, worldHeight)
             occupied.add(`${x},${z}`)
             placed++
+          } else if (rng.next() < 0.03) {
+            if (surfY + 1 < worldHeight) {
+              grid.setBlock({ x, y: surfY + 1, z }, WorldgenBlockType.DeadBush)
+              placed++
+            }
           }
           break
         }

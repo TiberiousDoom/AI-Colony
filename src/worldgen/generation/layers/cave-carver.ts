@@ -68,8 +68,9 @@ export function carveSpaghetti(
         const b = fractalNoise3D(noiseB, x * frequency, y * frequency, z * frequency, 2, 0.5, 2.0)
 
         // Thin tunnels where both values are near zero
-        const depthFactor = Math.min(1, (surfaceY - y) / 6)
-        if (Math.abs(a) + Math.abs(b) < threshold * (2 - depthFactor * 0.5)) {
+        // depthFactor: 0 near surface, 1 deep underground — suppress caves near surface
+        const depthFactor = Math.min(1, (surfaceY - y) / 8)
+        if (Math.abs(a) + Math.abs(b) < threshold * depthFactor) {
           grid.setBlock({ x, y, z }, WorldgenBlockType.Air)
           carved++
         }

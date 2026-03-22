@@ -19,7 +19,7 @@ function findPath(
   heightMap: Float32Array,
   sx: number, sz: number,
   ex: number, ez: number,
-  maxSteps: number = 3000,
+  maxSteps: number = 8000,
 ): number | null {
   const { worldWidth, worldDepth } = grid
   const key = (x: number, z: number) => x * worldDepth + z
@@ -71,7 +71,7 @@ export function analyzeNavigability(
   heightMap: Float32Array,
   rng: SeededRNG,
   seaLevel: number,
-  sampleCount: number = 30,
+  sampleCount: number = 50,
 ): NavigabilityResult {
   const { worldWidth, worldDepth } = grid
 

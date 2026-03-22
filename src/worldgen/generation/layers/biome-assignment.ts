@@ -320,10 +320,10 @@ export function assignBiomesMultiNoise(
         biome = BiomeType.Mountains
       } else if (temp < -0.25) {
         biome = BiomeType.Tundra
+      } else if (temp > 0.2 && humid < -0.3) {
+        biome = BiomeType.Badlands
       } else if (temp > 0.25 && humid < -0.1) {
         biome = BiomeType.Desert
-      } else if (temp > 0.2 && humid < -0.25) {
-        biome = BiomeType.Badlands
       } else if (humid > 0.25 && temp > 0.05) {
         biome = BiomeType.Swamp
       } else if (humid > -0.05 || temp < 0.05) {
