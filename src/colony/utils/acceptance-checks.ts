@@ -1400,7 +1400,10 @@ const p5WorldSizeConfig: AcceptanceCheck = {
       if (WORLD_SIZE_MAP.large.width !== 80 || WORLD_SIZE_MAP.large.height !== 80) {
         return { status: 'fail', detail: `Large should be 80x80` }
       }
-      return { status: 'pass', detail: 'All 3 world sizes have correct dimensions' }
+      if (WORLD_SIZE_MAP.xlarge.width !== 160 || WORLD_SIZE_MAP.xlarge.height !== 160) {
+        return { status: 'fail', detail: `X-Large should be 160x160, got ${WORLD_SIZE_MAP.xlarge.width}x${WORLD_SIZE_MAP.xlarge.height}` }
+      }
+      return { status: 'pass', detail: 'All 4 world sizes have correct dimensions' }
     } catch (e) {
       return { status: 'fail', detail: `${e}` }
     }

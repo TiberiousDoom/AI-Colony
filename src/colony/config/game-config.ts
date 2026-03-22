@@ -11,7 +11,7 @@ import type { Genome } from '../simulation/ai/genome.ts'
 import type { BiomeType } from '../simulation/biomes.ts'
 import { POPULATION } from './game-constants.ts'
 
-export type WorldSize = 'small' | 'medium' | 'large'
+export type WorldSize = 'small' | 'medium' | 'large' | 'xlarge'
 export type ResourceLevel = 'scarce' | 'normal' | 'abundant'
 export type EventFrequency = 'calm' | 'normal' | 'intense'
 
@@ -32,6 +32,7 @@ export const WORLD_SIZE_MAP: Record<WorldSize, { width: number; height: number }
   small: { width: 48, height: 48 },
   medium: { width: 64, height: 64 },
   large: { width: 80, height: 80 },
+  xlarge: { width: 160, height: 160 },
 }
 
 export const RESOURCE_MULTIPLIER: Record<ResourceLevel, number> = {
@@ -141,7 +142,7 @@ export function decodeConfigString(str: string): Partial<GameConfig> {
   if (seed) result.seed = parseInt(seed, 10)
 
   const size = params.get('size')
-  if (size === 'small' || size === 'medium' || size === 'large') result.worldSize = size
+  if (size === 'small' || size === 'medium' || size === 'large' || size === 'xlarge') result.worldSize = size
 
   const ais = params.get('ais')
   if (ais) {

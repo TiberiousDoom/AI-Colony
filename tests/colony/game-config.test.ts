@@ -64,6 +64,14 @@ describe('buildCompetitionConfig', () => {
     expect(cc.worldWidth).toBe(80)
   })
 
+  it('respects xlarge world size', () => {
+    const gc = getDefaultGameConfig()
+    gc.worldSize = 'xlarge'
+    const cc = buildCompetitionConfig(gc)
+    expect(cc.worldWidth).toBe(160)
+    expect(cc.worldHeight).toBe(160)
+  })
+
   it('filters out disabled AIs', () => {
     const gc = getDefaultGameConfig()
     gc.aiSelection = { utility: true, bt: false, goap: true, evolutionary: false }
@@ -138,6 +146,7 @@ describe('constant maps', () => {
     expect(WORLD_SIZE_MAP.small).toEqual({ width: 48, height: 48 })
     expect(WORLD_SIZE_MAP.medium).toEqual({ width: 64, height: 64 })
     expect(WORLD_SIZE_MAP.large).toEqual({ width: 80, height: 80 })
+    expect(WORLD_SIZE_MAP.xlarge).toEqual({ width: 160, height: 160 })
   })
 
   it('RESOURCE_MULTIPLIER values', () => {
