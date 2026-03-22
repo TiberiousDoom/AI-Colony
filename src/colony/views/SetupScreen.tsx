@@ -232,6 +232,7 @@ export function SetupScreen() {
               { value: 'small', label: 'Small (48x48)' },
               { value: 'medium', label: 'Medium (64x64)' },
               { value: 'large', label: 'Large (80x80)' },
+              { value: 'xlarge', label: 'X-Large (160x160)' },
             ]}
           />
         </div>

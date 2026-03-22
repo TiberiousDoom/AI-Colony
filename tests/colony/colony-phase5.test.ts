@@ -108,7 +108,7 @@ describe('GameConfig & Setup', () => {
   })
 
   it('9. buildCompetitionConfig maps world sizes correctly', () => {
-    for (const size of ['small', 'medium', 'large'] as const) {
+    for (const size of ['small', 'medium', 'large', 'xlarge'] as const) {
       const gc = { ...getDefaultGameConfig(), worldSize: size, seed: 42 }
       const cc = buildCompetitionConfig(gc)
       expect(cc.worldWidth).toBe(WORLD_SIZE_MAP[size].width)
@@ -284,7 +284,7 @@ describe('Acceptance Checks', () => {
 
 describe('Config-to-Competition Integration', () => {
   it('27. all world sizes produce valid competition configs', () => {
-    for (const size of ['small', 'medium', 'large'] as const) {
+    for (const size of ['small', 'medium', 'large', 'xlarge'] as const) {
       const gc = { ...getDefaultGameConfig(), worldSize: size, seed: 42 }
       const cc = buildCompetitionConfig(gc)
       expect(cc.villages.length).toBeGreaterThanOrEqual(2)

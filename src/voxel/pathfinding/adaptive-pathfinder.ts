@@ -39,7 +39,7 @@ export class AdaptivePathfinder implements IPathfinder {
   /** Duck-typed hook called by ScenarioRunner after terrain setup. */
   rebuildLayers(): void {
     this.selectDelegate()
-    const d = this.delegate as Record<string, unknown>
+    const d = this.delegate as unknown as Record<string, unknown>
     if (typeof d.rebuildLayers === 'function') {
       (d.rebuildLayers as () => void)()
     }
@@ -48,7 +48,7 @@ export class AdaptivePathfinder implements IPathfinder {
   /** Duck-typed hook called by ScenarioRunner after terrain setup. */
   rebuildGraph(): void {
     this.selectDelegate()
-    const d = this.delegate as Record<string, unknown>
+    const d = this.delegate as unknown as Record<string, unknown>
     if (typeof d.rebuildGraph === 'function') {
       (d.rebuildGraph as () => void)()
     }
