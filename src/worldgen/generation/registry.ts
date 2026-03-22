@@ -6,12 +6,15 @@ import { SplineNoiseGenerator } from './spline-noise.ts'
 import { GrammarHybridGenerator } from './grammar-hybrid.ts'
 
 export const ALL_GENERATORS: IWorldGenerator[] = [
+  new SplineNoiseGenerator(),
   new LayeredPerlinGenerator(),
   new DomainWarpingGenerator(),
   new MultiPassSculptingGenerator(),
-  new SplineNoiseGenerator(),
   new GrammarHybridGenerator(),
 ]
+
+/** The recommended default algorithm for world generation. */
+export const DEFAULT_GENERATOR_ID = 'spline-noise'
 
 export function getGeneratorById(id: string): IWorldGenerator | undefined {
   return ALL_GENERATORS.find(g => g.id === id)

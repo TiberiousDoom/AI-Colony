@@ -105,7 +105,7 @@ describe('Phase 4: Navigability Analysis', () => {
 
 describe('Phase 4: Parameter Changes Affect Output', () => {
   it('changing frequency changes terrain', () => {
-    const gen = ALL_GENERATORS[0] // Layered Perlin
+    const gen = ALL_GENERATORS.find(g => g.id === 'layered-perlin')!
     const config = createDefaultConfig(42)
     const r1 = gen.generate({ ...config, params: { ...gen.getDefaultParams(), frequency: 0.01 } })
     const r2 = gen.generate({ ...config, params: { ...gen.getDefaultParams(), frequency: 0.05 } })
