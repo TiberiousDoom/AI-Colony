@@ -149,9 +149,9 @@ Port from `src/worldgen/generation/layers/spawn-placement.ts`:
 
 ---
 
-## Files to Create (C#, in Unity project)
+## Part 2: Water Features
 
-### 1. `WaterFeatureGenerator.cs` — Core generation algorithms
+### `WaterFeatureGenerator.cs` — Core generation algorithms
 
 **Namespace:** `VoxelRPG.WorldGen.Layers`
 
@@ -191,7 +191,7 @@ public struct WaterFeatureParams
     public int CaveFloodMaxY;   // default 12, -1 to disable
 }
 
-public struct WaterFeatureResult
+public class WaterFeatureResult  // class, not struct — contains reference type (List)
 {
     public int RiversPlaced;
     public int TotalRiverLength;
@@ -202,7 +202,7 @@ public struct WaterFeatureResult
 }
 ```
 
-### 2. `WaterBlockDefinition.cs` — Block type integration
+### `WaterBlockDefinition.cs` — Block type integration
 
 **Namespace:** `VoxelRPG.Voxel`
 
@@ -213,7 +213,7 @@ Ensure the existing block system has a Water type with these properties:
 - `IsTransparent = true` — for rendering (see-through faces)
 - `BlocksNavMesh = true` — excluded from NavMesh walkable surface
 
-### 3. `WaterInteraction.cs` — NPC/water interaction component
+### `WaterInteraction.cs` — NPC/water interaction component
 
 **Namespace:** `VoxelRPG.NPC`
 
@@ -225,7 +225,7 @@ Attach alongside `NPCController`. Handles swimming with movement penalty:
 - **NavMesh area cost**: Water marked as high-cost area (cost = 10) so NPCs prefer land paths but CAN swim through if no alternative
 - Integrates with `NPCNeeds` if thirst is added later (optional, not in scope)
 
-### 4. `WaterNavMeshModifier.cs` — NavMesh integration
+### `WaterNavMeshModifier.cs` — NavMesh integration
 
 **Namespace:** `VoxelRPG.Voxel`
 
@@ -235,7 +235,7 @@ After water generation, mark water surface cells as a custom NavMesh area:
 - Re-bake NavMesh after water placement (already happens after worldgen)
 - No bridge crossings needed since NPCs can swim (bridges are a future aesthetic feature)
 
-### 5. `WaterRenderer.cs` — Visual rendering
+### `WaterRenderer.cs` — Visual rendering
 
 **Namespace:** `VoxelRPG.Rendering`
 
@@ -306,11 +306,56 @@ Note: Grammar structures (step 4) run before water so that rivers/lakes don't fi
 | `Set<number>` visited | `HashSet<int>` visited |
 | `Map<number, number>` basin | `Dictionary<int, float>` basin |
 | `rng.fork()` | `new System.Random(seed + offset)` or custom SeededRNG |
-| `createNoise2D(rng)` + `fractalNoise()` | `Mathf.PerlinNoise` or FastNoiseLite library |
+| `createNoise2D(rng)` + `fractalNoise()` | **Port sandbox simplex directly** (see Noise section below) |
 | `grid.setBlock(pos, type)` | `voxelWorld.SetBlock(pos, type)` via `IVoxelWorld` |
 | `grid.getBlock(pos)` | `voxelWorld.GetBlock(pos)` |
 | `grid.isInBounds(pos)` | Bounds check against chunk system |
 | `performance.now()` timing | `System.Diagnostics.Stopwatch` |
+
+### Noise Library: Port Sandbox Simplex (do NOT use Mathf.PerlinNoise)
+
+The sandbox uses a custom seeded simplex noise implementation (`src/shared/noise.ts`) with specific gradient tables (12 vectors for 2D, 16 for 3D) and integer-only arithmetic for determinism. Unity's `Mathf.PerlinNoise` is a different algorithm (classic Perlin, not simplex), has different spectral properties, different output range, and is NOT seedable — terrain would look completely different from the sandbox prototypes.
+
+**Recommendation:** Port the sandbox's `createNoise2D()`, `createNoise3D()`, `fractalNoise()`, and `fractalNoise3D()` directly to C#. The implementation is ~270 lines of pure math with no JS-specific dependencies. This preserves:
+- Identical terrain output for the same seed (validated against sandbox benchmarks)
+- Seeded determinism (Fisher-Yates permutation table from RNG)
+- Both 2D (terrain shape, biomes) and 3D (caves) support
+
+Create as `SimplexNoise.cs` in `VoxelRPG.WorldGen.Utils`.
+
+### Target World Size
+
+**Must define before porting.** The sandbox benchmarks at 128x64x128 (~1M voxels). Shovel Monster likely needs larger worlds. Key scaling concerns:
+
+| World Size | Heightmap | Cave Flood Visited Array | Est. Gen Time |
+|-----------|-----------|-------------------------|--------------|
+| 128x64x128 | 64 KB | 1 MB | ~500ms (proven) |
+| 256x128x256 | 256 KB | 8 MB | ~4s (estimated) |
+| 512x128x512 | 1 MB | 32 MB | ~16s (estimated) |
+
+The hybrid chunk streaming strategy (below) mitigates runtime memory, but the global planning pass still needs the full heightmap. For worlds > 256x256, consider a reduced-resolution heightmap (sample every 2nd column) for river/lake planning.
+
+### Post-Water Tundra Ice Pass
+
+**Known issue:** Biome assignment runs before water features and freezes sea-level water in Tundra. Rivers and lakes carved afterward in Tundra will contain unfrozen water — a visual inconsistency.
+
+**Fix:** Add a lightweight post-water pass at the end of `GenerateWaterFeatures()`:
+```csharp
+// After all water is placed, freeze surfaces in Tundra
+for each water surface cell:
+    if biomeMap[x, z] == BiomeType.Tundra:
+        grid.SetBlock(topWaterY, BlockType.Ice)
+```
+This should also be backported to the TypeScript sandbox.
+
+### Navigability Analyzer (Debug Tool)
+
+Port `src/worldgen/analysis/navigability.ts` as `NavigabilityAnalyzer.cs` in `VoxelRPG.WorldGen.Analysis`:
+- BFS-based path sampling: test 50 random surface point-pairs for reachability
+- Flood-fill from world center to count isolated regions
+- Weighted score: 50% path success + 30% isolation penalty + 20% path efficiency
+- Run as optional post-gen validation (editor-only, not in builds)
+- Critical for catching regressions when water features or grammar structures fragment terrain
 
 **Chunk streaming strategy: Hybrid (global paths, local carve)**
 
@@ -337,51 +382,75 @@ This means river paths are coherent across chunks without needing the full heigh
 ### Phase A: Core Terrain Generation
 | Step | What | Depends On |
 |------|------|-----------|
-| A1 | Block type enum/registry (all terrain + ore + fluid types) | — |
-| A2 | `SplineMapper.cs` (spline evaluation utility) | — |
-| A3 | `TerrainShapeGenerator.cs` (Spline-Noise heightmap) | A1, A2 |
-| A4 | `BiomeAssigner.cs` (multi-noise biome selection) | A1, A3 |
-| A5 | `CaveCarver.cs` (cheese + spaghetti caves) | A1, A3 |
-| A6 | `OreDistributor.cs` (depth-based ore veins) | A1, A3 |
-| A7 | `SurfaceDecorator.cs` (trees, cacti, flowers) | A1, A3, A4 |
-| A8 | `SpawnPlacer.cs` (rifts + resource nodes) | A1, A3, A4 |
+| A1 | Block type enum/registry (all terrain + ore + fluid types, including `IsFluid`) | — |
+| A2 | `SimplexNoise.cs` (port sandbox's seeded simplex 2D/3D) | — |
+| A3 | `SplineMapper.cs` (spline evaluation utility) | — |
+| A4 | `TerrainShapeGenerator.cs` (Spline-Noise heightmap) | A1, A2, A3 |
+| A5 | `BiomeAssigner.cs` (multi-noise biome selection) | A1, A2, A4 |
+| A6 | `CaveCarver.cs` (cheese + spaghetti caves) | A1, A2, A4 |
+| A7 | `OreDistributor.cs` (depth-based ore veins) | A1, A4 |
+| A8 | `SurfaceDecorator.cs` (trees, cacti, flowers) | A1, A4, A5 |
+| A9 | `SpawnPlacer.cs` (rifts + resource nodes) | A1, A4, A5 |
 
-Steps A4-A6 can be done in parallel after A3.
+Steps A5-A7 can be done in parallel after A4.
 
 ### Phase B: Grammar Structures
 | Step | What | Depends On |
 |------|------|-----------|
-| B1 | `RoomTemplates.cs` (room definitions + connection points) | A1 |
-| B2 | `GrammarEngine.cs` (production rule expansion) | B1 |
-| B3 | `StructurePlacer.cs` (carve into terrain) | B2, A3 |
+| B1 | `RoomTemplates.cs` (8 room types + connection points) | A1 |
+| B2 | `GrammarEngine.cs` (8 production rules, depth-weighted) | B1 |
+| B3 | `StructurePlacer.cs` (carve into terrain, collision checking) | B2, A4 |
 
-Phase B can run in parallel with Phase A steps 4-8.
+Phase B can run in parallel with Phase A steps 5-9.
 
 ### Phase C: Water Features
 | Step | What | Depends On |
 |------|------|-----------|
-| C1 | Add `IsFluid` property to block interface | A1 |
-| C2 | `WaterFeatureGenerator.cs` (rivers, lakes, cave flooding) | C1, A3, A5 |
+| C1 | `WaterFeatureGenerator.cs` (rivers, lakes, cave flooding) | A1, A4, A6 |
+| C2 | Post-water Tundra ice pass (freeze river/lake surfaces in Tundra) | C1, A5 |
 | C3 | Wire into pipeline (after caves + grammar, before ores) | C2, B3 |
-| C4 | Modify `NPCController.CheckIfFloating` for water | C1 |
-| C5 | `WaterInteraction.cs` (swim mode, drowning) | C1, C4 |
+| C4 | Modify `NPCController.CheckIfFloating` for water | A1 |
+| C5 | `WaterInteraction.cs` (swim mode, drowning) | A1, C4 |
 | C6 | `WaterNavMeshModifier.cs` (area cost marking) | C3 |
-| C7 | `WaterRenderer.cs` (transparent material, animation) | C1 |
+| C7 | `WaterRenderer.cs` (transparent material, animation) | A1 |
 | C8 | Water-related tasks in `TaskManager` | C5, C6 |
 
 Steps C4-C7 can be done in parallel after C3.
+
+### Phase D: Validation & Debug Tools
+| Step | What | Depends On |
+|------|------|-----------|
+| D1 | `NavigabilityAnalyzer.cs` (BFS path sampling, region counting) | A4 |
+| D2 | Post-gen validation pass (flag seeds with nav score < 0.3) | D1, C3 |
+| D3 | Benchmark at target world size (compare against sandbox metrics) | All above |
 
 ---
 
 ## Verification
 
-1. **Generate a test world** with seed 42 — verify rivers visible flowing from mountains to sea level
-2. **Cross-section view** — confirm lakes fill depressions, underground caves have water pockets below Y=12
-3. **NPC pathfinding** — NPCs should path around rivers/lakes, not walk through water
-4. **NPC falling into water** — should trigger swim mode, not instant death
-5. **Block counts** — Water block count should increase 30-60% over sea-level-only fill (matches sandbox metrics)
-6. **Performance** — water generation should add < 100ms to worldgen (sandbox shows 29-65ms at 128x64x128)
-7. **Headless runner** — port the timing column to show Water phase alongside other phases
+### Terrain Generation
+1. **Seed determinism** — same seed must produce identical terrain in C# as in TypeScript sandbox (requires ported simplex noise, not Mathf.PerlinNoise)
+2. **Biome balance** — Spline-Noise should produce ~30% Mountains, ~31% Forest (matching sandbox benchmark)
+3. **Cave connectivity** — cheese+spaghetti caves should produce both large chambers and winding tunnels
+4. **Grammar structures** — dungeons should have valid room connectivity (no dead-end corridors, boss rooms at depth >= 6)
+
+### Water Features
+5. **Rivers** — visible gradient-descent paths from mountains to sea level
+6. **Lakes** — depressions filled with water, not in desert biomes
+7. **Tundra freezing** — river and lake surfaces frozen in Tundra zones (post-water ice pass)
+8. **Underground flooding** — cave pockets below Y=12 contain water, surface-connected caves do NOT
+9. **Block counts** — Water block count should increase 30-60% over sea-level-only fill (matches sandbox)
+
+### NPC Integration
+10. **Pathfinding** — NPCs prefer land paths but swim through water when no alternative (10x cost)
+11. **Swim mode** — NPCs enter swim state at 40% speed when in water, exit on land
+12. **Falling into water** — triggers swim, not death; velocity decelerates
+13. **Drowning** — damage after 5s submerged (head block is Water)
+
+### Performance
+14. **Generation time** — full pipeline < 2s at target world size (sandbox: ~500ms at 128x64x128)
+15. **Water phase** — adds < 100ms (sandbox: 29-65ms)
+16. **Navigability score** — > 0.3 across 50 sampled seeds (sandbox Spline-Noise: 0.376)
 
 ---
 

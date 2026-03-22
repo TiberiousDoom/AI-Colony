@@ -62,6 +62,10 @@ export function generateWaterFeatures(
     result.caveFloodVolume = floodUndergroundCaves(grid, heightMap, seaLevel, p.caveFloodMaxY)
   }
 
+  // Freeze water surfaces in Tundra biomes (biome assignment runs before water,
+  // so rivers/lakes carved afterward need a post-pass to freeze)
+  freezeTundraWater(grid, heightMap, biomeMap, seaLevel)
+
   return result
 }
 
@@ -412,4 +416,39 @@ function floodUndergroundCaves(
   }
 
   return volume
+}
+
+// ── Tundra Ice Freezing ─────────────────────────────────────────────────────
+
+/**
+ * Freeze the top water block in each column that falls in a Tundra biome.
+ * This runs after all water features so that rivers and lakes in Tundra get frozen.
+ */
+function freezeTundraWater(
+  grid: WorldgenGrid,
+  heightMap: Float32Array,
+  biomeMap: Uint8Array,
+  seaLevel: number,
+): void {
+  const { worldWidth, worldDepth } = grid
+  const key = (x: number, z: number) => x * worldDepth + z
+
+  for (let x = 0; x < worldWidth; x++) {
+    for (let z = 0; z < worldDepth; z++) {
+      if (biomeMap[key(x, z)] !== BiomeType.Tundra) continue
+
+      // Scan downward from above the surface to find the top water block
+      const surfY = Math.floor(heightMap[key(x, z)])
+      const scanTop = Math.max(surfY + 2, seaLevel + 1)
+
+      for (let y = scanTop; y >= 1; y--) {
+        const block = grid.getBlock({ x, y, z })
+        if (block === WorldgenBlockType.Water) {
+          grid.setBlock({ x, y, z }, WorldgenBlockType.Ice)
+          break // Only freeze the top-most water block per column
+        }
+        if (block !== WorldgenBlockType.Air) break // Hit solid ground, stop scanning
+      }
+    }
+  }
 }
