@@ -2,9 +2,11 @@ import { createRNG } from '../../shared/seed.ts'
 import { createNoise2D, fractalNoise } from '../../shared/noise.ts'
 import { WorldgenGrid } from '../world/worldgen-grid.ts'
 import { WorldgenBlockType } from '../world/block-types.ts'
+import { carveAgentWorms } from './layers/cave-carver.ts'
+import { assignBiomesFromTerrain } from './layers/biome-assignment.ts'
 import {
   type IWorldGenerator, type GenerationConfig, type GenerationResult,
-  type ParamDesc, createEmptyTiming, computeMetadata, BiomeType,
+  type ParamDesc, createEmptyTiming, computeMetadata,
 } from './generator-interface.ts'
 
 export class MultiPassSculptingGenerator implements IWorldGenerator {
@@ -19,6 +21,8 @@ export class MultiPassSculptingGenerator implements IWorldGenerator {
       ridgeAmp: 12,
       baseHeight: 30,
       octaves: 4,
+      wormCount: 10,
+      wormSteps: 150,
     }
   }
 
@@ -30,6 +34,8 @@ export class MultiPassSculptingGenerator implements IWorldGenerator {
       ridgeAmp:      { label: 'Ridge Amp',       min: 5, max: 25, step: 1 },
       baseHeight:    { label: 'Base Height',     min: 16, max: 48, step: 1 },
       octaves:       { label: 'Octaves',         min: 1, max: 8, step: 1 },
+      wormCount:     { label: 'Worm Count',      min: 5, max: 20, step: 5 },
+      wormSteps:     { label: 'Worm Steps',      min: 50, max: 300, step: 50 },
     }
   }
 
@@ -50,23 +56,19 @@ export class MultiPassSculptingGenerator implements IWorldGenerator {
 
     for (let x = 0; x < worldWidth; x++) {
       for (let z = 0; z < worldDepth; z++) {
-        // Pass 1: Continent shape (very low frequency)
         const continentVal = fractalNoise(
           continentNoise,
           x * params.continentFreq, z * params.continentFreq,
           params.octaves, 0.5, 2.0,
         )
 
-        // Pass 2: Ridge noise for mountains (absolute value creates ridges)
         const ridgeVal = 1.0 - Math.abs(fractalNoise(
           ridgeNoise,
           x * params.ridgeFreq, z * params.ridgeFreq,
           params.octaves, 0.5, 2.0,
         ))
-        // Square the ridge value to sharpen peaks
         const ridgeHeight = ridgeVal * ridgeVal * params.ridgeAmp
 
-        // Combine passes
         const height = Math.floor(
           params.baseHeight + continentVal * params.continentAmp + ridgeHeight,
         )
@@ -90,8 +92,15 @@ export class MultiPassSculptingGenerator implements IWorldGenerator {
     }
     timing.terrainMs = performance.now() - terrainStart
 
-    const biomeMap = new Uint8Array(config.worldWidth * config.worldDepth)
-    biomeMap.fill(BiomeType.Plains)
+    // Biomes: terrain-based (elevation + slope)
+    const biomeStart = performance.now()
+    const biomeMap = assignBiomesFromTerrain(grid, heightMap, rng.fork(), config.seaLevel)
+    timing.biomesMs = performance.now() - biomeStart
+
+    // Caves: Method C (agent worms)
+    const caveStart = performance.now()
+    carveAgentWorms(grid, heightMap, rng.fork(), params.wormCount, params.wormSteps)
+    timing.cavesMs = performance.now() - caveStart
 
     timing.totalMs = performance.now() - totalStart
     const metadata = computeMetadata(grid, heightMap)

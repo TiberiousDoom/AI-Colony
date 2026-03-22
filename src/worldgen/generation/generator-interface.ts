@@ -94,14 +94,20 @@ export function computeMetadata(grid: WorldgenGrid, heightMap: Float32Array): Ge
     totalH += h
   }
 
-  // Count blocks
-  for (let x = 0; x < grid.worldWidth; x++) {
-    for (let y = 0; y < grid.worldHeight; y++) {
-      for (let z = 0; z < grid.worldDepth; z++) {
+  // Count blocks — sample every 2nd voxel for performance
+  const step = 2
+  for (let x = 0; x < grid.worldWidth; x += step) {
+    for (let y = 0; y < grid.worldHeight; y += step) {
+      for (let z = 0; z < grid.worldDepth; z += step) {
         const type = grid.getBlock({ x, y, z })
         blockCounts[type] = (blockCounts[type] ?? 0) + 1
       }
     }
+  }
+  // Scale counts to approximate full volume
+  const scaleFactor = step * step * step
+  for (const key of Object.keys(blockCounts)) {
+    blockCounts[Number(key)] *= scaleFactor
   }
 
   return {

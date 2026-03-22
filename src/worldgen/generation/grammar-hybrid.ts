@@ -3,16 +3,17 @@ import { createNoise2D } from '../../shared/noise.ts'
 import { WorldgenGrid } from '../world/worldgen-grid.ts'
 import { WorldgenBlockType } from '../world/block-types.ts'
 import { generateTerrainShape } from './layers/terrain-shape.ts'
+import { carveSpaghetti } from './layers/cave-carver.ts'
+import { assignBiomes } from './layers/biome-assignment.ts'
 import {
   type IWorldGenerator, type GenerationConfig, type GenerationResult,
-  type ParamDesc, createEmptyTiming, computeMetadata, BiomeType,
+  type ParamDesc, createEmptyTiming, computeMetadata,
 } from './generator-interface.ts'
 
 /**
  * Algorithm 5: Grammar Hybrid
- * Uses noise for base terrain (like Layered Perlin) then carves
- * grammar-generated structures underground.
- * Phase 1: places a single test room as proof of concept.
+ * Uses noise for base terrain then carves grammar-generated structures underground.
+ * Natural caves use Method B (spaghetti) + grammar rooms.
  */
 export class GrammarHybridGenerator implements IWorldGenerator {
   readonly name = 'Grammar Hybrid'
@@ -27,18 +28,20 @@ export class GrammarHybridGenerator implements IWorldGenerator {
       roomCount: 3,
       roomMinSize: 6,
       roomMaxSize: 12,
+      caveThreshold: 0.03,
     }
   }
 
   getParamDescriptions(): Record<string, ParamDesc> {
     return {
-      octaves:     { label: 'Octaves',       min: 1, max: 8,  step: 1 },
-      frequency:   { label: 'Frequency',     min: 0.005, max: 0.1, step: 0.005 },
-      amplitude:   { label: 'Amplitude',     min: 5, max: 30, step: 1 },
-      baseHeight:  { label: 'Base Height',   min: 16, max: 48, step: 1 },
-      roomCount:   { label: 'Room Count',    min: 1, max: 10, step: 1 },
-      roomMinSize: { label: 'Room Min Size', min: 4, max: 10, step: 1 },
-      roomMaxSize: { label: 'Room Max Size', min: 6, max: 16, step: 1 },
+      octaves:        { label: 'Octaves',        min: 1, max: 8,  step: 1 },
+      frequency:      { label: 'Frequency',      min: 0.005, max: 0.1, step: 0.005 },
+      amplitude:      { label: 'Amplitude',      min: 5, max: 30, step: 1 },
+      baseHeight:     { label: 'Base Height',    min: 16, max: 48, step: 1 },
+      roomCount:      { label: 'Room Count',     min: 1, max: 10, step: 1 },
+      roomMinSize:    { label: 'Room Min Size',  min: 4, max: 10, step: 1 },
+      roomMaxSize:    { label: 'Room Max Size',  min: 6, max: 16, step: 1 },
+      caveThreshold:  { label: 'Cave Threshold', min: 0.01, max: 0.08, step: 0.005 },
     }
   }
 
@@ -50,7 +53,7 @@ export class GrammarHybridGenerator implements IWorldGenerator {
     const noise2D = createNoise2D(rng)
     const grid = new WorldgenGrid(config.worldWidth, config.worldHeight, config.worldDepth)
 
-    // Phase 1: Generate base terrain
+    // Generate base terrain
     const terrainStart = performance.now()
     const heightMap = generateTerrainShape(grid, noise2D, {
       octaves: params.octaves,
@@ -61,7 +64,16 @@ export class GrammarHybridGenerator implements IWorldGenerator {
     })
     timing.terrainMs = performance.now() - terrainStart
 
-    // Phase 1: Carve simple rectangular rooms underground
+    // Biomes
+    const biomeStart = performance.now()
+    const biomeMap = assignBiomes(grid, heightMap, rng.fork(), config.seaLevel)
+    timing.biomesMs = performance.now() - biomeStart
+
+    // Caves: Method B (spaghetti) for natural caves
+    const caveStart = performance.now()
+    carveSpaghetti(grid, heightMap, rng.fork(), params.caveThreshold)
+
+    // Grammar rooms carved underground
     const structureRng = rng.fork()
     const roomCount = Math.floor(params.roomCount)
     for (let r = 0; r < roomCount; r++) {
@@ -70,7 +82,7 @@ export class GrammarHybridGenerator implements IWorldGenerator {
       const roomD = structureRng.nextInt(params.roomMinSize, params.roomMaxSize)
 
       const rx = structureRng.nextInt(10, config.worldWidth - roomW - 10)
-      const ry = structureRng.nextInt(3, 15) // Underground
+      const ry = structureRng.nextInt(3, 15)
       const rz = structureRng.nextInt(10, config.worldDepth - roomD - 10)
 
       for (let x = rx; x < rx + roomW && x < config.worldWidth; x++) {
@@ -81,9 +93,7 @@ export class GrammarHybridGenerator implements IWorldGenerator {
         }
       }
     }
-
-    const biomeMap = new Uint8Array(config.worldWidth * config.worldDepth)
-    biomeMap.fill(BiomeType.Plains)
+    timing.cavesMs = performance.now() - caveStart
 
     timing.totalMs = performance.now() - totalStart
     const metadata = computeMetadata(grid, heightMap)

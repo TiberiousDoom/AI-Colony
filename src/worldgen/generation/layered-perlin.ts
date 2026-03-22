@@ -2,9 +2,11 @@ import { createRNG } from '../../shared/seed.ts'
 import { createNoise2D } from '../../shared/noise.ts'
 import { WorldgenGrid } from '../world/worldgen-grid.ts'
 import { generateTerrainShape } from './layers/terrain-shape.ts'
+import { carveNoiseThreshold } from './layers/cave-carver.ts'
+import { assignBiomes } from './layers/biome-assignment.ts'
 import {
   type IWorldGenerator, type GenerationConfig, type GenerationResult,
-  type ParamDesc, createEmptyTiming, computeMetadata, BiomeType,
+  type ParamDesc, createEmptyTiming, computeMetadata,
 } from './generator-interface.ts'
 
 export class LayeredPerlinGenerator implements IWorldGenerator {
@@ -17,15 +19,19 @@ export class LayeredPerlinGenerator implements IWorldGenerator {
       frequency: 0.02,
       amplitude: 20,
       baseHeight: 32,
+      caveThreshold: 0.45,
+      caveFrequency: 0.06,
     }
   }
 
   getParamDescriptions(): Record<string, ParamDesc> {
     return {
-      octaves:    { label: 'Octaves',    min: 1, max: 8,    step: 1 },
-      frequency:  { label: 'Frequency',  min: 0.005, max: 0.1, step: 0.005 },
-      amplitude:  { label: 'Amplitude',  min: 5, max: 30,   step: 1 },
-      baseHeight: { label: 'Base Height', min: 16, max: 48,  step: 1 },
+      octaves:        { label: 'Octaves',         min: 1, max: 8,    step: 1 },
+      frequency:      { label: 'Frequency',       min: 0.005, max: 0.1, step: 0.005 },
+      amplitude:      { label: 'Amplitude',       min: 5, max: 30,   step: 1 },
+      baseHeight:     { label: 'Base Height',     min: 16, max: 48,  step: 1 },
+      caveThreshold:  { label: 'Cave Threshold',  min: 0.2, max: 0.7, step: 0.05 },
+      caveFrequency:  { label: 'Cave Frequency',  min: 0.02, max: 0.1, step: 0.01 },
     }
   }
 
@@ -47,10 +53,15 @@ export class LayeredPerlinGenerator implements IWorldGenerator {
     })
     timing.terrainMs = performance.now() - terrainStart
 
-    // Placeholder biome map (all Plains for Phase 1)
-    const biomeMap = new Uint8Array(config.worldWidth * config.worldDepth)
-    biomeMap.fill(BiomeType.Plains)
-    timing.biomesMs = 0
+    // Biomes
+    const biomeStart = performance.now()
+    const biomeMap = assignBiomes(grid, heightMap, rng.fork(), config.seaLevel)
+    timing.biomesMs = performance.now() - biomeStart
+
+    // Caves: Method A (noise threshold)
+    const caveStart = performance.now()
+    carveNoiseThreshold(grid, heightMap, rng.fork(), params.caveThreshold, params.caveFrequency)
+    timing.cavesMs = performance.now() - caveStart
 
     timing.totalMs = performance.now() - totalStart
     const metadata = computeMetadata(grid, heightMap)

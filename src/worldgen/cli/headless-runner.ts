@@ -5,8 +5,18 @@
  * Outputs diagnostic metrics and comparison tables to stdout.
  */
 import { ALL_GENERATORS } from '../generation/registry.ts'
-import { createDefaultConfig, type GenerationResult, type IWorldGenerator } from '../generation/generator-interface.ts'
+import { createDefaultConfig, type GenerationResult, type IWorldGenerator, BiomeType } from '../generation/generator-interface.ts'
 import { WorldgenBlockType } from '../world/block-types.ts'
+
+const BIOME_NAMES: Record<number, string> = {
+  [BiomeType.Plains]: 'Plains',
+  [BiomeType.Forest]: 'Forest',
+  [BiomeType.Desert]: 'Desert',
+  [BiomeType.Tundra]: 'Tundra',
+  [BiomeType.Swamp]: 'Swamp',
+  [BiomeType.Mountains]: 'Mountains',
+  [BiomeType.Badlands]: 'Badlands',
+}
 
 interface CLIArgs {
   seed: number
@@ -135,6 +145,61 @@ function printResults(results: Map<string, GenerationResult>, generators: IWorld
     }),
   ])
   console.log(formatTable(blockHeaders, blockRows))
+
+  // Cave density by depth
+  console.log('\n--- Cave Density by Depth ---')
+  for (const gen of generators) {
+    const r = results.get(gen.id)
+    if (!r) continue
+    console.log(`\n  ${gen.name}:`)
+    const bucketCount = 8
+    const bucketSize = Math.ceil(r.grid.worldHeight / bucketCount)
+    const caveCounts = new Array(bucketCount).fill(0)
+    const totalCounts = new Array(bucketCount).fill(0)
+
+    for (let x = 0; x < r.grid.worldWidth; x += 4) {
+      for (let z = 0; z < r.grid.worldDepth; z += 4) {
+        const surfaceY = Math.floor(r.heightMap[x * r.grid.worldDepth + z])
+        for (let y = 1; y < surfaceY - 1; y++) {
+          const bucket = Math.min(bucketCount - 1, Math.floor(y / bucketSize))
+          totalCounts[bucket]++
+          if (r.grid.getBlock({ x, y, z }) === WorldgenBlockType.Air) {
+            caveCounts[bucket]++
+          }
+        }
+      }
+    }
+
+    for (let b = 0; b < bucketCount; b++) {
+      const label = `Y ${(b * bucketSize).toString().padStart(3)}-${((b + 1) * bucketSize - 1).toString().padStart(3)}`
+      const density = totalCounts[b] > 0 ? caveCounts[b] / totalCounts[b] : 0
+      const barLen = Math.round(density * 200)
+      const bar = '#'.repeat(barLen)
+      console.log(`    ${label} | ${bar} ${(density * 100).toFixed(1)}%`)
+    }
+  }
+
+  // Biome coverage
+  console.log('\n--- Biome Coverage ---')
+  const biomeHeaders = ['Algorithm', ...Object.values(BIOME_NAMES)]
+  const biomeRows = generators.map(gen => {
+    const r = results.get(gen.id)
+    if (!r) return [gen.name, ...Object.values(BIOME_NAMES).map(() => '-')]
+    const total = r.biomeMap.length
+    const counts: Record<number, number> = {}
+    for (let i = 0; i < r.biomeMap.length; i++) {
+      const b = r.biomeMap[i]
+      counts[b] = (counts[b] ?? 0) + 1
+    }
+    return [
+      gen.name,
+      ...Object.keys(BIOME_NAMES).map(b => {
+        const count = counts[Number(b)] ?? 0
+        return count > 0 ? `${(count / total * 100).toFixed(1)}%` : '-'
+      }),
+    ]
+  })
+  console.log(formatTable(biomeHeaders, biomeRows))
 
   // Height distribution histogram (text-based)
   console.log('\n--- Height Distribution (histogram) ---')

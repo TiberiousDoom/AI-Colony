@@ -14,12 +14,15 @@ const VIEWS: WorldgenView[] = ['dashboard', 'world', 'tuner']
 const VIZ_MODES: { id: VisualizationMode; label: string }[] = [
   { id: 'natural', label: 'Natural' },
   { id: 'heightmap', label: 'Height Map' },
+  { id: 'biome', label: 'Biome Map' },
+  { id: 'cave', label: 'Cave View' },
 ]
 
 function WorldgenApp({ onBack }: WorldgenAppProps) {
   const {
     seed, setSeed, selectedAlgorithms, toggleAlgorithm,
     activeView, setActiveView, vizMode, setVizMode,
+    crossSectionY, setCrossSectionY,
     generateAll, isGenerating,
   } = useWorldgenStore()
 
@@ -182,6 +185,21 @@ function WorldgenApp({ onBack }: WorldgenAppProps) {
               {m.label}
             </button>
           ))}
+          <span style={{ color: '#475569', margin: '0 0.3rem' }}>|</span>
+          <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            Y-Cut:
+            <input
+              type="range"
+              min={-1}
+              max={63}
+              value={crossSectionY}
+              onChange={(e) => setCrossSectionY(parseInt(e.target.value))}
+              style={{ width: '80px', accentColor: '#f59e0b' }}
+            />
+            <span style={{ color: '#e2e8f0', minWidth: '2rem' }}>
+              {crossSectionY < 0 ? 'Off' : crossSectionY}
+            </span>
+          </label>
         </div>
       )}
 

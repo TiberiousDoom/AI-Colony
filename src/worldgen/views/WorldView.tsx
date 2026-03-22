@@ -4,7 +4,7 @@ import { WorldgenRenderer } from '../rendering/worldgen-renderer.ts'
 import { ALL_GENERATORS } from '../generation/registry.ts'
 
 export function WorldView() {
-  const { results, selectedAlgorithms, vizMode } = useWorldgenStore()
+  const { results, selectedAlgorithms, vizMode, crossSectionY } = useWorldgenStore()
   const containerRef = useRef<HTMLDivElement>(null)
   const renderersRef = useRef<Map<string, WorldgenRenderer>>(new Map())
   const canvasesRef = useRef<Map<string, HTMLCanvasElement>>(new Map())
@@ -45,7 +45,6 @@ export function WorldView() {
         canvasesRef.current.set(gen.id, canvas)
       }
 
-      // Position in grid
       const idx = activeGenerators.indexOf(gen)
       const col = idx % cols
       const row = Math.floor(idx / cols)
@@ -64,9 +63,10 @@ export function WorldView() {
       }
 
       renderer.resize(w, h)
+      renderer.setCrossSectionY(crossSectionY)
       const result = results.get(gen.id)
       if (result) {
-        renderer.rebuildTerrain(result.grid, vizMode)
+        renderer.rebuildTerrain(result.grid, vizMode, result.biomeMap, result.heightMap)
       }
     }
 
@@ -106,7 +106,7 @@ export function WorldView() {
     return () => {
       cancelAnimationFrame(animFrameRef.current)
     }
-  }, [activeGenerators.length, vizMode, results])
+  }, [activeGenerators.length, vizMode, results, crossSectionY])
 
   useEffect(() => {
     return () => {

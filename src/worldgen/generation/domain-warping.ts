@@ -2,9 +2,11 @@ import { createRNG } from '../../shared/seed.ts'
 import { createNoise2D, fractalNoise } from '../../shared/noise.ts'
 import { WorldgenGrid } from '../world/worldgen-grid.ts'
 import { WorldgenBlockType } from '../world/block-types.ts'
+import { carveSpaghetti } from './layers/cave-carver.ts'
+import { assignBiomesWarped } from './layers/biome-assignment.ts'
 import {
   type IWorldGenerator, type GenerationConfig, type GenerationResult,
-  type ParamDesc, createEmptyTiming, computeMetadata, BiomeType,
+  type ParamDesc, createEmptyTiming, computeMetadata,
 } from './generator-interface.ts'
 
 export class DomainWarpingGenerator implements IWorldGenerator {
@@ -20,18 +22,20 @@ export class DomainWarpingGenerator implements IWorldGenerator {
       warpStrength: 30,
       warpFrequency: 0.01,
       warpOctaves: 3,
+      caveThreshold: 0.03,
     }
   }
 
   getParamDescriptions(): Record<string, ParamDesc> {
     return {
-      octaves:       { label: 'Octaves',        min: 1, max: 8,    step: 1 },
-      frequency:     { label: 'Frequency',      min: 0.005, max: 0.1, step: 0.005 },
-      amplitude:     { label: 'Amplitude',      min: 5, max: 30,   step: 1 },
-      baseHeight:    { label: 'Base Height',    min: 16, max: 48,  step: 1 },
-      warpStrength:  { label: 'Warp Strength',  min: 5, max: 60,   step: 5 },
-      warpFrequency: { label: 'Warp Frequency', min: 0.005, max: 0.05, step: 0.005 },
-      warpOctaves:   { label: 'Warp Octaves',   min: 1, max: 5,    step: 1 },
+      octaves:        { label: 'Octaves',         min: 1, max: 8,    step: 1 },
+      frequency:      { label: 'Frequency',       min: 0.005, max: 0.1, step: 0.005 },
+      amplitude:      { label: 'Amplitude',       min: 5, max: 30,   step: 1 },
+      baseHeight:     { label: 'Base Height',     min: 16, max: 48,  step: 1 },
+      warpStrength:   { label: 'Warp Strength',   min: 5, max: 60,   step: 5 },
+      warpFrequency:  { label: 'Warp Frequency',  min: 0.005, max: 0.05, step: 0.005 },
+      warpOctaves:    { label: 'Warp Octaves',    min: 1, max: 5,    step: 1 },
+      caveThreshold:  { label: 'Cave Threshold',  min: 0.01, max: 0.08, step: 0.005 },
     }
   }
 
@@ -41,7 +45,6 @@ export class DomainWarpingGenerator implements IWorldGenerator {
     const params = { ...this.getDefaultParams(), ...config.params }
     const rng = createRNG(config.seed)
 
-    // Two separate noise functions: one for terrain, two for warp (X and Z offsets)
     const terrainNoise = createNoise2D(rng)
     const warpNoiseX = createNoise2D(rng.fork())
     const warpNoiseZ = createNoise2D(rng.fork())
@@ -54,13 +57,11 @@ export class DomainWarpingGenerator implements IWorldGenerator {
 
     for (let x = 0; x < worldWidth; x++) {
       for (let z = 0; z < worldDepth; z++) {
-        // Compute warp offsets
         const wx = x * params.warpFrequency
         const wz = z * params.warpFrequency
         const dx = fractalNoise(warpNoiseX, wx, wz, params.warpOctaves, 0.5, 2.0) * params.warpStrength
         const dz = fractalNoise(warpNoiseZ, wx, wz, params.warpOctaves, 0.5, 2.0) * params.warpStrength
 
-        // Sample terrain at warped coordinates
         const nx = (x + dx) * params.frequency
         const nz = (z + dz) * params.frequency
         const noiseVal = fractalNoise(terrainNoise, nx, nz, params.octaves, 0.5, 2.0)
@@ -86,8 +87,15 @@ export class DomainWarpingGenerator implements IWorldGenerator {
     }
     timing.terrainMs = performance.now() - terrainStart
 
-    const biomeMap = new Uint8Array(config.worldWidth * config.worldDepth)
-    biomeMap.fill(BiomeType.Plains)
+    // Biomes: warped temperature/humidity maps
+    const biomeStart = performance.now()
+    const biomeMap = assignBiomesWarped(grid, heightMap, rng.fork(), config.seaLevel, params.warpStrength * 0.5)
+    timing.biomesMs = performance.now() - biomeStart
+
+    // Caves: Method B (domain-warped spaghetti)
+    const caveStart = performance.now()
+    carveSpaghetti(grid, heightMap, rng.fork(), params.caveThreshold)
+    timing.cavesMs = performance.now() - caveStart
 
     timing.totalMs = performance.now() - totalStart
     const metadata = computeMetadata(grid, heightMap)

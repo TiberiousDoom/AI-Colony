@@ -3,9 +3,11 @@ import { createNoise2D, fractalNoise } from '../../shared/noise.ts'
 import { WorldgenGrid } from '../world/worldgen-grid.ts'
 import { WorldgenBlockType } from '../world/block-types.ts'
 import { evaluateSpline, createDefaultHeightSpline } from '../utils/spline.ts'
+import { carveCheeseAndSpaghetti } from './layers/cave-carver.ts'
+import { assignBiomesMultiNoise } from './layers/biome-assignment.ts'
 import {
   type IWorldGenerator, type GenerationConfig, type GenerationResult,
-  type ParamDesc, createEmptyTiming, computeMetadata, BiomeType,
+  type ParamDesc, createEmptyTiming, computeMetadata,
 } from './generator-interface.ts'
 
 export class SplineNoiseGenerator implements IWorldGenerator {
@@ -57,12 +59,10 @@ export class SplineNoiseGenerator implements IWorldGenerator {
 
     for (let x = 0; x < worldWidth; x++) {
       for (let z = 0; z < worldDepth; z++) {
-        // Three noise fields
         const cVal = fractalNoise(continentalNoise, x * params.continentalFreq, z * params.continentalFreq, 3, 0.5, 2.0)
         const eVal = fractalNoise(erosionNoise, x * params.erosionFreq, z * params.erosionFreq, 3, 0.5, 2.0)
         const pVal = fractalNoise(peaksNoise, x * params.peaksFreq, z * params.peaksFreq, 2, 0.5, 2.0)
 
-        // Weighted combination
         const totalWeight = params.continentalWeight + params.erosionWeight + params.peaksWeight
         const combined = (
           cVal * params.continentalWeight +
@@ -70,7 +70,6 @@ export class SplineNoiseGenerator implements IWorldGenerator {
           pVal * params.peaksWeight
         ) / totalWeight
 
-        // Map through spline
         const splineVal = evaluateSpline(spline, combined)
 
         const height = Math.floor(params.baseHeight + splineVal * params.heightScale)
@@ -94,8 +93,15 @@ export class SplineNoiseGenerator implements IWorldGenerator {
     }
     timing.terrainMs = performance.now() - terrainStart
 
-    const biomeMap = new Uint8Array(config.worldWidth * config.worldDepth)
-    biomeMap.fill(BiomeType.Plains)
+    // Biomes: multi-noise selection
+    const biomeStart = performance.now()
+    const biomeMap = assignBiomesMultiNoise(grid, heightMap, rng.fork(), config.seaLevel)
+    timing.biomesMs = performance.now() - biomeStart
+
+    // Caves: Methods A+B combined (cheese + spaghetti)
+    const caveStart = performance.now()
+    carveCheeseAndSpaghetti(grid, heightMap, rng.fork())
+    timing.cavesMs = performance.now() - caveStart
 
     timing.totalMs = performance.now() - totalStart
     const metadata = computeMetadata(grid, heightMap)

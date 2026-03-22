@@ -12,6 +12,7 @@ interface WorldgenStore {
   results: Map<string, GenerationResult>
   activeView: WorldgenView
   vizMode: VisualizationMode
+  crossSectionY: number // -1 = disabled
   paramOverrides: Record<string, Record<string, number>>
   isGenerating: boolean
 
@@ -20,6 +21,7 @@ interface WorldgenStore {
   toggleAlgorithm: (id: string) => void
   setActiveView: (view: WorldgenView) => void
   setVizMode: (mode: VisualizationMode) => void
+  setCrossSectionY: (y: number) => void
   setParam: (algorithmId: string, param: string, value: number) => void
   generateAll: () => void
   generateOne: (algorithmId: string) => void
@@ -31,6 +33,7 @@ export const useWorldgenStore = create<WorldgenStore>((set, get) => ({
   results: new Map(),
   activeView: 'dashboard',
   vizMode: 'natural',
+  crossSectionY: -1,
   paramOverrides: {},
   isGenerating: false,
 
@@ -57,6 +60,10 @@ export const useWorldgenStore = create<WorldgenStore>((set, get) => ({
 
   setVizMode(mode: VisualizationMode) {
     set({ vizMode: mode })
+  },
+
+  setCrossSectionY(y: number) {
+    set({ crossSectionY: y })
   },
 
   setParam(algorithmId: string, param: string, value: number) {
