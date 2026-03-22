@@ -1,4 +1,5 @@
 import type { WorldgenGrid } from '../world/worldgen-grid.ts'
+import type { SpawnPoint } from './layers/spawn-placement.ts'
 
 export enum BiomeType {
   Plains = 0,
@@ -41,6 +42,7 @@ export interface GenerationResult {
   grid: WorldgenGrid
   heightMap: Float32Array
   biomeMap: Uint8Array
+  spawnPoints: SpawnPoint[]
   timing: GenerationTiming
   metadata: GenerationMetadata
 }

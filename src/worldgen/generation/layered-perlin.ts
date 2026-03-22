@@ -4,6 +4,9 @@ import { WorldgenGrid } from '../world/worldgen-grid.ts'
 import { generateTerrainShape } from './layers/terrain-shape.ts'
 import { carveNoiseThreshold } from './layers/cave-carver.ts'
 import { assignBiomes } from './layers/biome-assignment.ts'
+import { placeOres } from './layers/ore-placement.ts'
+import { decorateSurface } from './layers/surface-decoration.ts'
+import { placeSpawnPoints } from './layers/spawn-placement.ts'
 import {
   type IWorldGenerator, type GenerationConfig, type GenerationResult,
   type ParamDesc, createEmptyTiming, computeMetadata,
@@ -15,12 +18,8 @@ export class LayeredPerlinGenerator implements IWorldGenerator {
 
   getDefaultParams(): Record<string, number> {
     return {
-      octaves: 4,
-      frequency: 0.02,
-      amplitude: 20,
-      baseHeight: 32,
-      caveThreshold: 0.45,
-      caveFrequency: 0.06,
+      octaves: 4, frequency: 0.02, amplitude: 20, baseHeight: 32,
+      caveThreshold: 0.45, caveFrequency: 0.06,
     }
   }
 
@@ -45,27 +44,33 @@ export class LayeredPerlinGenerator implements IWorldGenerator {
 
     const terrainStart = performance.now()
     const heightMap = generateTerrainShape(grid, noise2D, {
-      octaves: params.octaves,
-      frequency: params.frequency,
-      amplitude: params.amplitude,
-      baseHeight: params.baseHeight,
-      seaLevel: config.seaLevel,
+      octaves: params.octaves, frequency: params.frequency,
+      amplitude: params.amplitude, baseHeight: params.baseHeight, seaLevel: config.seaLevel,
     })
     timing.terrainMs = performance.now() - terrainStart
 
-    // Biomes
     const biomeStart = performance.now()
     const biomeMap = assignBiomes(grid, heightMap, rng.fork(), config.seaLevel)
     timing.biomesMs = performance.now() - biomeStart
 
-    // Caves: Method A (noise threshold)
     const caveStart = performance.now()
     carveNoiseThreshold(grid, heightMap, rng.fork(), params.caveThreshold, params.caveFrequency)
     timing.cavesMs = performance.now() - caveStart
 
+    const oreStart = performance.now()
+    placeOres(grid, heightMap, rng.fork())
+    timing.oresMs = performance.now() - oreStart
+
+    const decoStart = performance.now()
+    decorateSurface(grid, heightMap, biomeMap, rng.fork(), config.seaLevel)
+    timing.decorationMs = performance.now() - decoStart
+
+    const spawnStart = performance.now()
+    const spawnPoints = placeSpawnPoints(grid, heightMap, biomeMap, rng.fork(), config.seaLevel)
+    timing.spawnsMs = performance.now() - spawnStart
+
     timing.totalMs = performance.now() - totalStart
     const metadata = computeMetadata(grid, heightMap)
-
-    return { grid, heightMap, biomeMap, timing, metadata }
+    return { grid, heightMap, biomeMap, spawnPoints, timing, metadata }
   }
 }

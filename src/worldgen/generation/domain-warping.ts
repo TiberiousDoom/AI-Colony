@@ -4,6 +4,9 @@ import { WorldgenGrid } from '../world/worldgen-grid.ts'
 import { WorldgenBlockType } from '../world/block-types.ts'
 import { carveSpaghetti } from './layers/cave-carver.ts'
 import { assignBiomesWarped } from './layers/biome-assignment.ts'
+import { placeOres } from './layers/ore-placement.ts'
+import { decorateSurface } from './layers/surface-decoration.ts'
+import { placeSpawnPoints } from './layers/spawn-placement.ts'
 import {
   type IWorldGenerator, type GenerationConfig, type GenerationResult,
   type ParamDesc, createEmptyTiming, computeMetadata,
@@ -15,14 +18,8 @@ export class DomainWarpingGenerator implements IWorldGenerator {
 
   getDefaultParams(): Record<string, number> {
     return {
-      octaves: 4,
-      frequency: 0.02,
-      amplitude: 20,
-      baseHeight: 32,
-      warpStrength: 30,
-      warpFrequency: 0.01,
-      warpOctaves: 3,
-      caveThreshold: 0.03,
+      octaves: 4, frequency: 0.02, amplitude: 20, baseHeight: 32,
+      warpStrength: 30, warpFrequency: 0.01, warpOctaves: 3, caveThreshold: 0.03,
     }
   }
 
@@ -48,58 +45,53 @@ export class DomainWarpingGenerator implements IWorldGenerator {
     const terrainNoise = createNoise2D(rng)
     const warpNoiseX = createNoise2D(rng.fork())
     const warpNoiseZ = createNoise2D(rng.fork())
-
     const grid = new WorldgenGrid(config.worldWidth, config.worldHeight, config.worldDepth)
     const heightMap = new Float32Array(config.worldWidth * config.worldDepth)
 
     const terrainStart = performance.now()
     const { worldWidth, worldDepth, worldHeight } = grid
-
     for (let x = 0; x < worldWidth; x++) {
       for (let z = 0; z < worldDepth; z++) {
-        const wx = x * params.warpFrequency
-        const wz = z * params.warpFrequency
+        const wx = x * params.warpFrequency, wz = z * params.warpFrequency
         const dx = fractalNoise(warpNoiseX, wx, wz, params.warpOctaves, 0.5, 2.0) * params.warpStrength
         const dz = fractalNoise(warpNoiseZ, wx, wz, params.warpOctaves, 0.5, 2.0) * params.warpStrength
-
-        const nx = (x + dx) * params.frequency
-        const nz = (z + dz) * params.frequency
+        const nx = (x + dx) * params.frequency, nz = (z + dz) * params.frequency
         const noiseVal = fractalNoise(terrainNoise, nx, nz, params.octaves, 0.5, 2.0)
-
-        const height = Math.floor(params.baseHeight + noiseVal * params.amplitude)
-        const clampedHeight = Math.max(1, Math.min(worldHeight - 1, height))
+        const clampedHeight = Math.max(1, Math.min(worldHeight - 1, Math.floor(params.baseHeight + noiseVal * params.amplitude)))
         heightMap[x * worldDepth + z] = clampedHeight
-
         for (let y = 0; y < worldHeight; y++) {
-          if (y === 0) {
-            grid.setBlock({ x, y, z }, WorldgenBlockType.Bedrock)
-          } else if (y < clampedHeight - 3) {
-            grid.setBlock({ x, y, z }, WorldgenBlockType.Stone)
-          } else if (y < clampedHeight) {
-            grid.setBlock({ x, y, z }, WorldgenBlockType.Dirt)
-          } else if (y === clampedHeight) {
-            grid.setBlock({ x, y, z }, WorldgenBlockType.Grass)
-          } else if (y <= config.seaLevel) {
-            grid.setBlock({ x, y, z }, WorldgenBlockType.Water)
-          }
+          if (y === 0) grid.setBlock({ x, y, z }, WorldgenBlockType.Bedrock)
+          else if (y < clampedHeight - 3) grid.setBlock({ x, y, z }, WorldgenBlockType.Stone)
+          else if (y < clampedHeight) grid.setBlock({ x, y, z }, WorldgenBlockType.Dirt)
+          else if (y === clampedHeight) grid.setBlock({ x, y, z }, WorldgenBlockType.Grass)
+          else if (y <= config.seaLevel) grid.setBlock({ x, y, z }, WorldgenBlockType.Water)
         }
       }
     }
     timing.terrainMs = performance.now() - terrainStart
 
-    // Biomes: warped temperature/humidity maps
     const biomeStart = performance.now()
     const biomeMap = assignBiomesWarped(grid, heightMap, rng.fork(), config.seaLevel, params.warpStrength * 0.5)
     timing.biomesMs = performance.now() - biomeStart
 
-    // Caves: Method B (domain-warped spaghetti)
     const caveStart = performance.now()
     carveSpaghetti(grid, heightMap, rng.fork(), params.caveThreshold)
     timing.cavesMs = performance.now() - caveStart
 
+    const oreStart = performance.now()
+    placeOres(grid, heightMap, rng.fork())
+    timing.oresMs = performance.now() - oreStart
+
+    const decoStart = performance.now()
+    decorateSurface(grid, heightMap, biomeMap, rng.fork(), config.seaLevel)
+    timing.decorationMs = performance.now() - decoStart
+
+    const spawnStart = performance.now()
+    const spawnPoints = placeSpawnPoints(grid, heightMap, biomeMap, rng.fork(), config.seaLevel)
+    timing.spawnsMs = performance.now() - spawnStart
+
     timing.totalMs = performance.now() - totalStart
     const metadata = computeMetadata(grid, heightMap)
-
-    return { grid, heightMap, biomeMap, timing, metadata }
+    return { grid, heightMap, biomeMap, spawnPoints, timing, metadata }
   }
 }
