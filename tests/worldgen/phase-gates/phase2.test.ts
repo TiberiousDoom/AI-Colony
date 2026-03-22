@@ -3,7 +3,6 @@ import { ALL_GENERATORS } from '../../../src/worldgen/generation/registry.ts'
 import { createDefaultConfig, BiomeType, type GenerationResult } from '../../../src/worldgen/generation/generator-interface.ts'
 import { WorldgenBlockType } from '../../../src/worldgen/world/block-types.ts'
 import { createRNG } from '../../../src/shared/seed.ts'
-import { createNoise3D } from '../../../src/shared/noise.ts'
 import { WorldgenGrid } from '../../../src/worldgen/world/worldgen-grid.ts'
 import {
   carveNoiseThreshold,

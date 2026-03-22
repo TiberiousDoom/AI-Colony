@@ -3,10 +3,9 @@
  * Run with: npx tsx src/worldgen/cli/benchmark.ts [count] [--csv]
  */
 import { ALL_GENERATORS } from '../generation/registry.ts'
-import { createDefaultConfig, type GenerationResult } from '../generation/generator-interface.ts'
+import { createDefaultConfig } from '../generation/generator-interface.ts'
 import { analyzeNavigability } from '../analysis/navigability.ts'
 import { createRNG } from '../../shared/seed.ts'
-import { BiomeType } from '../generation/generator-interface.ts'
 
 const count = parseInt(process.argv[2]) || 10
 const csvMode = process.argv.includes('--csv')

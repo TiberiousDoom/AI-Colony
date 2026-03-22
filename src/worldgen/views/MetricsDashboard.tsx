@@ -42,29 +42,6 @@ function computeBiomeCoverage(biomeMap: Uint8Array): Record<number, number> {
   return counts
 }
 
-function computeCaveDensityByDepth(result: GenerationResult): number[] {
-  const { grid, heightMap } = result
-  const bucketCount = 16
-  const bucketSize = Math.ceil(grid.worldHeight / bucketCount)
-  const caveCounts = new Array(bucketCount).fill(0)
-  const totalCounts = new Array(bucketCount).fill(0)
-
-  for (let x = 0; x < grid.worldWidth; x += 2) {
-    for (let z = 0; z < grid.worldDepth; z += 2) {
-      const surfaceY = Math.floor(heightMap[x * grid.worldDepth + z])
-      for (let y = 1; y < surfaceY - 1; y++) {
-        const bucket = Math.min(bucketCount - 1, Math.floor(y / bucketSize))
-        totalCounts[bucket]++
-        if (grid.getBlock({ x, y, z }) === WorldgenBlockType.Air) {
-          caveCounts[bucket]++
-        }
-      }
-    }
-  }
-
-  return caveCounts.map((c, i) => totalCounts[i] > 0 ? c / totalCounts[i] : 0)
-}
-
 export function MetricsDashboard() {
   const { results, selectedAlgorithms } = useWorldgenStore()
 

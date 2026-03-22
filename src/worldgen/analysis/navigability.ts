@@ -1,5 +1,5 @@
 import type { WorldgenGrid } from '../world/worldgen-grid.ts'
-import { WorldgenBlockType, isSolid } from '../world/block-types.ts'
+
 import type { SeededRNG } from '../../shared/seed.ts'
 
 export interface NavigabilityResult {
@@ -25,7 +25,6 @@ function findPath(
   const key = (x: number, z: number) => x * worldDepth + z
 
   const startY = Math.floor(heightMap[key(sx, sz)])
-  const endY = Math.floor(heightMap[key(ex, ez)])
 
   // Simple BFS with step constraint
   const visited = new Set<number>()

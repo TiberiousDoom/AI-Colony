@@ -80,7 +80,7 @@ interface RiverResult { count: number; totalLength: number }
 function carveRivers(
   grid: WorldgenGrid,
   heightMap: Float32Array,
-  biomeMap: Uint8Array,
+  _biomeMap: Uint8Array,
   rng: SeededRNG,
   seaLevel: number,
   riverCount: number,
@@ -240,7 +240,7 @@ function fillLakes(
   grid: WorldgenGrid,
   heightMap: Float32Array,
   biomeMap: Uint8Array,
-  rng: SeededRNG,
+  _rng: SeededRNG,
   seaLevel: number,
 ): LakeResult {
   const { worldWidth, worldDepth } = grid
@@ -351,7 +351,7 @@ function fillLakes(
 function floodUndergroundCaves(
   grid: WorldgenGrid,
   heightMap: Float32Array,
-  seaLevel: number,
+  _seaLevel: number,
   maxFloodY: number,
 ): number {
   const { worldWidth, worldHeight, worldDepth } = grid

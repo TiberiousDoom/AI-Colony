@@ -1,5 +1,4 @@
 import type { WorldgenGrid } from '../world/worldgen-grid.ts'
-import { WorldgenBlockType } from '../world/block-types.ts'
 
 export interface TerrainMetrics {
   heightDistribution: number[]   // 16 buckets

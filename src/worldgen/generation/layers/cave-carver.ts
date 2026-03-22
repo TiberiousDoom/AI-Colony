@@ -18,7 +18,7 @@ export function carveNoiseThreshold(
   octaves: number = 2,
 ): number {
   const noise3D = createNoise3D(rng)
-  const { worldWidth, worldHeight, worldDepth } = grid
+  const { worldWidth, worldHeight: _worldHeight, worldDepth } = grid
   let carved = 0
 
   for (let x = 0; x < worldWidth; x++) {
@@ -54,7 +54,7 @@ export function carveSpaghetti(
 ): number {
   const noiseA = createNoise3D(rng)
   const noiseB = createNoise3D(rng.fork())
-  const { worldWidth, worldHeight, worldDepth } = grid
+  const { worldWidth, worldHeight: _worldHeight, worldDepth } = grid
   let carved = 0
 
   for (let x = 0; x < worldWidth; x++) {

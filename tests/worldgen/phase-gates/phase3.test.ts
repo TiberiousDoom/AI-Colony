@@ -6,7 +6,7 @@ import { WorldgenGrid } from '../../../src/worldgen/world/worldgen-grid.ts'
 import { createRNG } from '../../../src/shared/seed.ts'
 import { placeOres } from '../../../src/worldgen/generation/layers/ore-placement.ts'
 import { decorateSurface } from '../../../src/worldgen/generation/layers/surface-decoration.ts'
-import { placeSpawnPoints, type SpawnPoint } from '../../../src/worldgen/generation/layers/spawn-placement.ts'
+import { placeSpawnPoints } from '../../../src/worldgen/generation/layers/spawn-placement.ts'
 import { expandGrammar } from '../../../src/worldgen/grammar/grammar-engine.ts'
 import { placeStructures } from '../../../src/worldgen/grammar/structure-placer.ts'
 
@@ -48,13 +48,13 @@ describe('Phase 3: Ore Placement', () => {
     placeOres(grid, heightMap, createRNG(42))
 
     // Coal can appear anywhere, crystal only deep
-    let coalFound = false, crystalFound = false
+    let coalFound = false
     for (let x = 0; x < 64; x += 2) {
       for (let z = 0; z < 64; z += 2) {
         for (let y = 1; y < 30; y++) {
           const block = grid.getBlock({ x, y, z })
           if (block === WorldgenBlockType.Coal) coalFound = true
-          if (block === WorldgenBlockType.Crystal) crystalFound = true
+          // Crystal is rare, not asserted here
         }
       }
     }
@@ -213,7 +213,7 @@ describe('Phase 3: Grammar Engine', () => {
   })
 
   it('placeStructures carves rooms into grid', () => {
-    const { grid, heightMap } = createTestGrid()
+    const { grid, heightMap: _heightMap } = createTestGrid()
     const rng = createRNG(42)
     const result = expandGrammar(rng, 20, 5, 20, 5, 64, 64, 64)
     const carved = placeStructures(grid, result)
@@ -236,7 +236,7 @@ describe('Phase 3: Full Pipeline (All 5 Algorithms)', () => {
       })
 
       it('has ore blocks underground', () => {
-        const { grid, heightMap } = result
+        const { grid } = result
         const oreTypes = [WorldgenBlockType.Coal, WorldgenBlockType.Iron, WorldgenBlockType.Copper,
                           WorldgenBlockType.Gold, WorldgenBlockType.Gem, WorldgenBlockType.Crystal]
         let oreCount = 0

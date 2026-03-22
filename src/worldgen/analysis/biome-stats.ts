@@ -1,5 +1,3 @@
-import { BiomeType } from '../generation/generator-interface.ts'
-
 export interface BiomeStats {
   coverage: Record<number, number>     // biome -> fraction (0-1)
   regionCount: Record<number, number>  // biome -> number of distinct regions

@@ -1,7 +1,6 @@
 import type { SeededRNG } from '../../../shared/seed.ts'
 import type { WorldgenGrid } from '../../world/worldgen-grid.ts'
 import { WorldgenBlockType } from '../../world/block-types.ts'
-import type { BiomeType } from '../generator-interface.ts'
 
 interface OreConfig {
   type: WorldgenBlockType

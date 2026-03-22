@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { ALL_GENERATORS } from '../../../src/worldgen/generation/registry.ts'
-import { createDefaultConfig, BiomeType } from '../../../src/worldgen/generation/generator-interface.ts'
+import { createDefaultConfig } from '../../../src/worldgen/generation/generator-interface.ts'
 import { WorldgenBlockType } from '../../../src/worldgen/world/block-types.ts'
 import { BlockType } from '../../../src/voxel/world/block-types.ts'
 import { createRNG } from '../../../src/shared/seed.ts'
